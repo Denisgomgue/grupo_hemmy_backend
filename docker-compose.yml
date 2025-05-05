@@ -1,0 +1,16 @@
+services:
+  app:
+    build:
+      context: . # Usa el Dockerfile en el directorio actual
+      dockerfile: Dockerfile
+    ports:
+      - "${APP_PORT}:3000" # Usa la variable APP_PORT para el puerto del host
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - DB_USER=${DB_USER}
+      - DB_NAME=${DB_NAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - BACKEND_URL=${BACKEND_URL}
+      - FRONTEND_URL=${FRONTEND_URL}

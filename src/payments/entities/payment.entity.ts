@@ -2,17 +2,18 @@ import { Client } from 'src/client/entities/client.entity';
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne, JoinColumn, UpdateDateColumn } from 'typeorm';
 
 export enum PaymentType {
-    CASH = 'EFECTIVO',
-    TRANSFER = 'TRANSFERENCIA',
+    TRANSFER = 'TRANSFER',
+    CASH = 'CASH',
     YAPE = 'YAPE',
     PLIN = 'PLIN',
-    OTHER = 'OTRO OPCION',
+    OTHER = 'OTHER',
 }
 
+
 export enum PaymentStatus {
-    PENDING = 'PENDIENTE',
-    PAYMENT_DAILY = 'PAGO AL DIA',
-    LATE_PAYMENT = 'PAGO ATRASADO'
+    PENDING = 'PENDING',
+    PAYMENT_DAILY = 'PAYMENT_DAILY',
+    LATE_PAYMENT = 'LATE_PAYMENT'
 }
 
 @Entity()
@@ -23,8 +24,6 @@ export class Payment {
     @Column({ nullable: true })
     paymentDate?: Date;
 
-    @Column({ nullable: true })
-    transfername: string;
 
     @Column({ nullable: true })
     reference: string;
@@ -35,20 +34,17 @@ export class Payment {
     @Column('decimal', { precision: 10, scale: 2 })
     amount: number;
 
-    @Column({
-        type: 'enum',
-        enum: PaymentStatus,
-    })
+    @Column({ type: 'enum', enum: PaymentStatus, nullable: true })
     state: PaymentStatus;
 
-    @Column({
-        type: 'enum',
-        enum: PaymentType,
-    })
-    paymentType?: PaymentType;
+    @Column({ type: 'enum', enum: PaymentType, nullable: true })
+    paymentType: PaymentType;
+
+    @Column({ nullable: true })
+    transfername?: string;
 
     @Column('decimal', { precision: 10, scale: 2, default: 0 })
-    discount: number;
+    discount?: number;
 
     @Column({ nullable: true })
     dueDate?: Date;
@@ -58,8 +54,8 @@ export class Payment {
     client: Client;
 
     @CreateDateColumn({ type: "timestamp", default: () => "CURRENT_TIMESTAMP(6)" })
-    public created_at: Date;
+    public created_At: Date;
 
     @UpdateDateColumn({ type: "timestamp", default: () => "CURRENT_TIMESTAMP(6)", onUpdate: "CURRENT_TIMESTAMP(6)" })
-    public updated_at: Date;
+    public updated_At: Date;
 } 

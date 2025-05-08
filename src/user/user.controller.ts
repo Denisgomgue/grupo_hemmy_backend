@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -19,30 +19,30 @@ export class UserController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.userService.findOne(+id);
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.userService.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.userService.update(+id, updateUserDto);
+  update(@Param('id', ParseIntPipe) id: number, @Body() updateUserDto: UpdateUserDto) {
+    return this.userService.update(id, updateUserDto);
   }
 
   @Patch(':id/change-password')
   async changePassword(
-    @Param('id') userId: number,
+    @Param('id', ParseIntPipe) userId: number,
     @Body() changePasswordDto: ChangePasswordDto,
   ) {
     return this.userService.changePassword(userId, changePasswordDto.currentPassword, changePasswordDto.newPassword);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.userService.remove(+id);
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.userService.remove(id);
   }
 
   @Post(':id/role/:roleId')
-  assignProfile(@Param('id') userId: number, @Param('roleId') roleId: number) {
+  assignProfile(@Param('id', ParseIntPipe) userId: number, @Param('roleId', ParseIntPipe) roleId: number) {
     return this.userService.assignProfile(userId, roleId);
   }
 }

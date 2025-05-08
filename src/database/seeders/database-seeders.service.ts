@@ -46,7 +46,7 @@ export class DatabaseSeederService {
         const adminUser = this.userRepository.create({
             name: 'Admin',
             surname: 'Hemmy',
-            username: 'LuaxitoFiuFiu',
+            username: 'hemicha',
             email: 'admin@hemmy.com',
             password: hashedPassword,
             role: adminRole,

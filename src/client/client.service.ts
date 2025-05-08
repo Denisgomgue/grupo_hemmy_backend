@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { Client, AccountStatus } from './entities/client.entity';
-import { Payment } from '../payments/entities/payment.entity';
+import { Payment, PaymentStatus } from '../payments/entities/payment.entity';
 
 @Injectable()
 export class ClientService {
@@ -52,6 +52,8 @@ export class ClientService {
     // Calcula el estado general
     const estadoGeneral = await this.getEstadoGeneralCliente(id);
 
+    console.log(`Cliente ID: ${id}, paymentStatus calculado por getEstadoGeneralCliente: `, estadoGeneral);
+
     // Retorna el cliente con el estado general SOLO para la respuesta
     return Object.assign({}, client, { paymentStatus: estadoGeneral });
   }
@@ -68,6 +70,8 @@ export class ClientService {
     if (updateClientDto.advancePayment !== undefined) clientData.advancePayment = updateClientDto.advancePayment;
     if (updateClientDto.status !== undefined) clientData.status = updateClientDto.status;
     if (updateClientDto.description !== undefined) clientData.description = updateClientDto.description;
+    if (updateClientDto.decoSerial !== undefined) clientData.decoSerial = updateClientDto.decoSerial;
+    if (updateClientDto.routerSerial !== undefined) clientData.routerSerial = updateClientDto.routerSerial;
 
     if (updateClientDto.installationDate !== undefined) {
         clientData.installationDate = updateClientDto.installationDate ? new Date(updateClientDto.installationDate) : null;
@@ -101,47 +105,86 @@ export class ClientService {
   }
 
   async getEstadoGeneralCliente(clienteId: number): Promise<string> {
-    const pagos = await this.paymentRepository.find({ where: { client: { id: clienteId } } });
+    const pagos = await this.paymentRepository.find({
+      where: { client: { id: clienteId } },
+    
+    });
+
     const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0); 
+    if (pagos.length === 0) {
+      return 'Sin pagos';
+    }
+
     let tienePendiente = false;
     let tienePorVencer = false;
     let tieneVencido = false;
     let tieneSuspendido = false;
-    let todosAlDia = true;
 
     for (const pago of pagos) {
-      if (pago.state === 'PENDIENTE') {
+      const fechaVencimiento = new Date(pago.dueDate);
+      fechaVencimiento.setHours(0, 0, 0, 0);
+
+      if (pago.state === PaymentStatus.PENDING) {
         tienePendiente = true;
-        todosAlDia = false;
-        continue;
+        // Continuar para evaluar todos los pagos, la prioridad se encargará del estado final.
       }
-      if (!pago.paymentDate) {
-        const fechaVencimiento = new Date(pago.dueDate);
-        const diasParaVencer = Math.ceil((fechaVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
-        const diasAtraso = Math.ceil((hoy.getTime() - fechaVencimiento.getTime()) / (1000 * 60 * 60 * 24));
-        todosAlDia = false;
-        if (diasParaVencer < 7 && diasParaVencer >= 0) {
-          tienePorVencer = true;
-        } else if (diasAtraso > 0 && diasAtraso <= 7) {
-          tieneVencido = true;
-        } else if (diasAtraso > 7) {
+
+      if (!pago.paymentDate) { // El pago no se ha realizado
+        // (Si también es PENDIENTE, tienePendiente ya está en true)
+        const diasDesdeVencimiento = Math.ceil((hoy.getTime() - fechaVencimiento.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diasDesdeVencimiento > 7) { // Más de 7 días después de la fecha de vencimiento
           tieneSuspendido = true;
+        } else if (diasDesdeVencimiento > 0) { // De 1 a 7 días vencido
+          tieneVencido = true;
+        } else { // Aún no está vencido o vence hoy
+          const diasParaVencer = Math.ceil((fechaVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+   
+          if (diasParaVencer >= 0 && diasParaVencer < 7) { // Vence en 0-6 días
+            tienePorVencer = true;
+          }
         }
       } else {
-        // Si el pago se hizo después del vencimiento, no está al día
-        const fechaVencimiento = new Date(pago.dueDate);
-        const fechaPago = new Date(pago.paymentDate);
-        if (fechaPago > fechaVencimiento) {
-          todosAlDia = false;
-        }
+        tienePendiente = true;
       }
     }
 
+    // Condición para "Al día": el último pago requerido esté completado y al día.
+    // Esto se verifica DESPUÉS de los estados prioritarios.
+    let ultimoPagoRequeridoCompletadoYAlDia = false;
+    if (pagos.length > 0) {
+      // Encontrar la fecha de vencimiento (dueDate) más reciente entre todos los pagos
+      const ultimaFechaVencimientoEpoch = Math.max(...pagos.map(p => new Date(p.dueDate).getTime()));
+      // Filtrar todos los pagos que coincidan con esta última fecha de vencimiento
+      const ultimosPagosRequeridos = pagos.filter(p => new Date(p.dueDate).getTime() === ultimaFechaVencimientoEpoch);
+
+      if (ultimosPagosRequeridos.length > 0) {
+        ultimoPagoRequeridoCompletadoYAlDia = ultimosPagosRequeridos.every(up =>
+          up.paymentDate && // Debe estar pagado
+          up.state !== PaymentStatus.PENDING &&
+          new Date(up.paymentDate).setHours(0,0,0,0) <= new Date(up.dueDate).setHours(0,0,0,0) // Debe pagarse en o antes de la fecha de vencimiento
+        );
+      }
+    }
+
+    // Devolver el estado según la prioridad
     if (tienePendiente) return 'Pendiente';
-    if (tieneSuspendido) return 'Suspendido';
+    if (tieneSuspendido) return 'Suspendido'; // Cumple "mas de 7 dias despues de la fecha de pago [vencimiento]"
     if (tieneVencido) return 'Vencido';
     if (tienePorVencer) return 'Por vencer';
-    if (todosAlDia) return 'Al día';
-    return 'Sin pagos';
+
+    // Si llegamos aquí, no hay deudas PENDIENTE, SUSPENDIDO, VENCIDO o POR VENCER.
+    // Esto cumple la parte de "no hay deudas" de la condición "Al día".
+    // Ahora verificamos si "el ultimo pago de la fecha este completado o pagado".
+    if (ultimoPagoRequeridoCompletadoYAlDia) {
+      return 'Al día';
+    }
+
+    // Fallback: Si ninguna de las condiciones anteriores se cumple.
+    // Ej: Pagos existen pero no caen en P, S, V, PV y el último no está "completado y al día"
+    // (podría ser un pago futuro no cercano, o un último pago que se hizo tarde pero no hay otras deudas).
+    // La lógica original retornaba 'Sin pagos' aquí.
+    return 'Sin pagos'; // O un estado más descriptivo si es necesario para estos casos.
   }
 }

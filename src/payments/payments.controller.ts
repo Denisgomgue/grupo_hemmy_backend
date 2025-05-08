@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe, Query } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { GetPaymentsSummaryDto } from './dto/get-payments-summary.dto';
 
 @Controller('payments')
 export class PaymentsController {
@@ -11,23 +12,28 @@ export class PaymentsController {
     return this.paymentsService.create(createPaymentDto);
   }
 
+  @Get('summary')
+  getSummary(@Query() getPaymentsSummaryDto: GetPaymentsSummaryDto) {
+    return this.paymentsService.getSummary(getPaymentsSummaryDto);
+  }
+
   @Get()
-  findAll() {
-    return this.paymentsService.findAll();
+  findAll(@Query('client') clientId?: string) {
+    return this.paymentsService.findAll(clientId ? parseInt(clientId) : undefined);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.paymentsService.findOne(+id);
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.paymentsService.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updatePaymentDto: Partial<CreatePaymentDto>) {
-    return this.paymentsService.update(+id, updatePaymentDto);
+  update(@Param('id', ParseIntPipe) id: number, @Body() updatePaymentDto: Partial<CreatePaymentDto>) {
+    return this.paymentsService.update(id, updatePaymentDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.paymentsService.remove(+id);
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.paymentsService.remove(id);
   }
 }

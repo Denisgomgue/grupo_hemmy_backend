@@ -1,6 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, UpdateDateColumn, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, UpdateDateColumn, JoinColumn, OneToMany } from 'typeorm';
 import { Sector } from 'src/sectors/entities/sector.entity';
 import { Plan } from 'src/plans/entities/plan.entity';
+import { Payment } from 'src/payments/entities/payment.entity';
 
 
 export enum AccountStatus {
@@ -10,10 +11,10 @@ export enum AccountStatus {
 }
 
 export enum PaymentStatus {
-    SUSPENDED = 'SUSPENDIDO',
-    EXPIRING = 'POR VENCER',
-    EXPIRED = 'VENCIDO',
-    PAID = 'AL DIA'
+    SUSPENDED = 'SUSPENDED',
+    EXPIRING = 'EXPIRING',
+    EXPIRED = 'EXPIRED',
+    PAID = 'PAID'
 }
 
 @Entity()
@@ -66,9 +67,12 @@ export class Client {
     @Column({
         type: 'enum',
         enum: AccountStatus,
-        default: AccountStatus.ACTIVE   
+        default: AccountStatus.ACTIVE
     })
     status: AccountStatus;
+
+    @OneToMany(() => Payment, (payment) => payment.client)
+    payments: Payment[];
 
     @ManyToOne(() => Plan, { eager: true, nullable: true, onDelete: 'SET NULL', onUpdate: 'CASCADE' })
     @JoinColumn({ name: 'planId' })

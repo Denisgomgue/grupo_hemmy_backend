@@ -4,12 +4,15 @@ import { Repository } from 'typeorm';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { Client, AccountStatus } from './entities/client.entity';
+import { Payment } from '../payments/entities/payment.entity';
 
 @Injectable()
 export class ClientService {
   constructor(
     @InjectRepository(Client)
     private readonly clientRepository: Repository<Client>,
+    @InjectRepository(Payment)
+    private readonly paymentRepository: Repository<Payment>,
   ) { }
 
   async create(createClientDto: CreateClientDto) {
@@ -46,7 +49,11 @@ export class ClientService {
       throw new NotFoundException(`Client with ID ${id} not found`);
     }
 
-    return client;
+    // Calcula el estado general
+    const estadoGeneral = await this.getEstadoGeneralCliente(id);
+
+    // Retorna el cliente con el estado general SOLO para la respuesta
+    return Object.assign({}, client, { paymentStatus: estadoGeneral });
   }
 
   async update(id: number, updateClientDto: UpdateClientDto) {
@@ -91,5 +98,50 @@ export class ClientService {
   async remove(id: number) {
     const client = await this.findOne(id);
     return await this.clientRepository.remove(client);
+  }
+
+  async getEstadoGeneralCliente(clienteId: number): Promise<string> {
+    const pagos = await this.paymentRepository.find({ where: { client: { id: clienteId } } });
+    const hoy = new Date();
+    let tienePendiente = false;
+    let tienePorVencer = false;
+    let tieneVencido = false;
+    let tieneSuspendido = false;
+    let todosAlDia = true;
+
+    for (const pago of pagos) {
+      if (pago.state === 'PENDIENTE') {
+        tienePendiente = true;
+        todosAlDia = false;
+        continue;
+      }
+      if (!pago.paymentDate) {
+        const fechaVencimiento = new Date(pago.dueDate);
+        const diasParaVencer = Math.ceil((fechaVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+        const diasAtraso = Math.ceil((hoy.getTime() - fechaVencimiento.getTime()) / (1000 * 60 * 60 * 24));
+        todosAlDia = false;
+        if (diasParaVencer < 7 && diasParaVencer >= 0) {
+          tienePorVencer = true;
+        } else if (diasAtraso > 0 && diasAtraso <= 7) {
+          tieneVencido = true;
+        } else if (diasAtraso > 7) {
+          tieneSuspendido = true;
+        }
+      } else {
+        // Si el pago se hizo después del vencimiento, no está al día
+        const fechaVencimiento = new Date(pago.dueDate);
+        const fechaPago = new Date(pago.paymentDate);
+        if (fechaPago > fechaVencimiento) {
+          todosAlDia = false;
+        }
+      }
+    }
+
+    if (tienePendiente) return 'Pendiente';
+    if (tieneSuspendido) return 'Suspendido';
+    if (tieneVencido) return 'Vencido';
+    if (tienePorVencer) return 'Por vencer';
+    if (todosAlDia) return 'Al día';
+    return 'Sin pagos';
   }
 }

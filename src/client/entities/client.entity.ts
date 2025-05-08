@@ -9,6 +9,13 @@ export enum AccountStatus {
     INACTIVE = 'INACTIVE'
 }
 
+export enum PaymentStatus {
+    SUSPENDED = 'SUSPENDIDO',
+    EXPIRING = 'POR VENCER',
+    EXPIRED = 'VENCIDO',
+    PAID = 'AL DIA'
+}
+
 @Entity()
 export class Client {
     @PrimaryGeneratedColumn()
@@ -32,7 +39,6 @@ export class Client {
     @Column({ nullable: true })
     installationDate: Date;
 
-
     @Column({ nullable: true })
     reference: string;
 
@@ -42,15 +48,27 @@ export class Client {
     @Column({ nullable: true })
     advancePayment: boolean;
 
+    @Column({ nullable: true })
+    description: string;
+
+    @Column({ nullable: true })
+    routerSerial: string;
+
+    @Column({ nullable: true })
+    decoSerial: string;
+
+    @Column({
+        type: 'enum',
+        enum: PaymentStatus,
+    })
+    paymentStatus: PaymentStatus;
+
     @Column({
         type: 'enum',
         enum: AccountStatus,
-        default: AccountStatus.ACTIVE
+        default: AccountStatus.ACTIVE   
     })
     status: AccountStatus;
-
-    @Column({ nullable: true})
-    description: string;    
 
     @ManyToOne(() => Plan, { eager: true, nullable: true, onDelete: 'SET NULL', onUpdate: 'CASCADE' })
     @JoinColumn({ name: 'planId' })
@@ -60,9 +78,9 @@ export class Client {
     @JoinColumn({ name: 'sectorId' })
     sector: Sector;
 
-    @CreateDateColumn({ type: "timestamp", default:() => "CURRENT_TIMESTAMP(6)"})
+    @CreateDateColumn({ type: "timestamp", default: () => "CURRENT_TIMESTAMP(6)" })
     public created_at: Date;
 
-    @UpdateDateColumn({ type: "timestamp", default:() => "CURRENT_TIMESTAMP(6)", onUpdate: "CURRENT_TIMESTAMP(6)"})
+    @UpdateDateColumn({ type: "timestamp", default: () => "CURRENT_TIMESTAMP(6)", onUpdate: "CURRENT_TIMESTAMP(6)" })
     public updated_at: Date;
 }

@@ -1,4 +1,4 @@
-import { AccountStatus } from "../entities/client.entity";
+import { AccountStatus, PaymentStatus } from "../entities/client.entity";
 
 export class CreateClientDto {
     name: string;
@@ -12,7 +12,9 @@ export class CreateClientDto {
     advancePayment: boolean;
     status: AccountStatus;
     description: string;    
-    plan: number;
-    sector: number;
-  }
-  
+    plan?: number;
+    sector?: number;
+    routerSerial?: string;
+    decoSerial?: string;
+    paymentStatus?: PaymentStatus;
+}

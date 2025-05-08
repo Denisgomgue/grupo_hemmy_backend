@@ -23,6 +23,8 @@ import { RoleHasPermission } from "./role-has-permissions/entities/role-has-perm
 import { RoleHasPermissionsModule } from "./role-has-permissions/role-has-permissions.module";
 import { RoleModule } from "./role/role.module";
 import { PermissionModule } from "./permission/permission.module";
+import { PaymentsModule } from "./payments/payments.module";
+import { Payment } from "./payments/entities/payment.entity";
 
 
 @Module({
@@ -43,7 +45,8 @@ import { PermissionModule } from "./permission/permission.module";
         Service,
         Role,
         Permission,
-        RoleHasPermission
+        RoleHasPermission,
+        Payment
       ],
       synchronize: true,
       //migrationsRun: true,
@@ -59,7 +62,8 @@ import { PermissionModule } from "./permission/permission.module";
     DatabaseSeederModule,
     RoleHasPermissionsModule,
     RoleModule,
-    PermissionModule
+    PermissionModule,
+    PaymentsModule
   ],
   controllers: [AppController],
   providers: [

@@ -1,9 +1,9 @@
-import { IsNumber, IsOptional, Min, IsString, IsBoolean, IsEnum } from 'class-validator';
+import { IsNumber, IsOptional, Min, IsString, IsBoolean, IsEnum, IsDateString } from 'class-validator';
 import { PaymentStatus, PaymentType } from '../entities/payment.entity';
 
 export class CreatePaymentDto {
   @IsOptional()
-  @IsString() // O IsDateString si quieres validar formato de fecha
+  @IsDateString() // Cambiamos a IsDateString para validar el formato de fecha
   paymentDate?: string;
 
   // Asumiendo que transfername es opcional basado en la entidad (nullable: true)
@@ -29,7 +29,7 @@ export class CreatePaymentDto {
   // Si necesitas recibirlo, debe ser opcional y validado.
 
   @IsOptional()
-  discount?: number; 
+  discount?: number;
   @IsOptional()
   @IsNumber()
   client?: number;

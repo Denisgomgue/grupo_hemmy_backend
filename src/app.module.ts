@@ -25,6 +25,7 @@ import { RoleModule } from "./role/role.module";
 import { PermissionModule } from "./permission/permission.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { Payment } from "./payments/entities/payment.entity";
+import { PaymentHistory } from "./payment-history/entities/payment-history.entity";
 
 
 @Module({
@@ -46,7 +47,8 @@ import { Payment } from "./payments/entities/payment.entity";
         Role,
         Permission,
         RoleHasPermission,
-        Payment
+        Payment,
+        PaymentHistory
       ],
       synchronize: true,
       //migrationsRun: true,
@@ -64,8 +66,9 @@ import { Payment } from "./payments/entities/payment.entity";
     RoleModule,
     PermissionModule,
     PaymentsModule
+
   ],
-  controllers: [AppController],
+  controllers: [ AppController ],
   providers: [
     AppService,
     {

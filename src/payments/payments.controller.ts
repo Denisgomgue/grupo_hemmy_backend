@@ -5,7 +5,7 @@ import { GetPaymentsSummaryDto } from './dto/get-payments-summary.dto';
 
 @Controller('payments')
 export class PaymentsController {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(private readonly paymentsService: PaymentsService) { }
 
   @Post()
   create(@Body() createPaymentDto: CreatePaymentDto) {

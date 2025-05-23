@@ -1,5 +1,6 @@
 import { Client } from 'src/client/entities/client.entity';
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne, JoinColumn, UpdateDateColumn } from 'typeorm';
+import { User } from 'src/user/entities/user.entity';
 
 export enum PaymentType {
     TRANSFER = 'TRANSFER',

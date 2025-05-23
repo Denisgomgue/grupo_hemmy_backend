@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Command } from 'nestjs-command';
 import { DatabaseSeederService } from './database-seeders.service';
 
 @Injectable()
 export class DatabaseSeederCommand {
+    private readonly logger = new Logger(DatabaseSeederCommand.name);
+
     constructor(private readonly databaseSeederService: DatabaseSeederService) { }
 
     @Command({
@@ -11,8 +13,8 @@ export class DatabaseSeederCommand {
         describe: 'Seed the database with initial data',
     })
     async seed() {
-        console.log('Starting database seeding...');
+        this.logger.log('Iniciando proceso de seeding en la base de datos...');
         await this.databaseSeederService.seed();
-        console.log('Database seeding completed successfully.');
+        this.logger.log('Proceso de seeding completado exitosamente.');
     }
 }

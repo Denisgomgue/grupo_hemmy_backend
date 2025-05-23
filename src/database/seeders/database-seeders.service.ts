@@ -1,15 +1,23 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Role } from '../../role/entities/role.entity';
+import { Permission } from '../../permission/entities/permission.entity';
+import { RoleHasPermission } from '../../role-has-permissions/entities/role-has-permission.entity';
 import { User } from '../../user/entities/user.entity';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class DatabaseSeederService {
+    private readonly logger = new Logger(DatabaseSeederService.name);
+
     constructor(
         @InjectRepository(Role)
         private roleRepository: Repository<Role>,
+        @InjectRepository(Permission)
+        private permissionRepository: Repository<Permission>,
+        @InjectRepository(RoleHasPermission)
+        private roleHasPermissionRepository: Repository<RoleHasPermission>,
         @InjectRepository(User)
         private userRepository: Repository<User>,
     ) { }
@@ -20,25 +28,26 @@ export class DatabaseSeederService {
     }
 
     private async seedAdminRole(): Promise<Role> {
-        const existingRole = await this.roleRepository.findOne({ where: { name: 'Admin' } });
+        const existingRole = await this.roleRepository.findOne({ where: { name: 'admin' } });
         if (existingRole) {
+            this.logger.log('Role "admin" ya existe.');
             return existingRole;
         }
 
         const adminRole = this.roleRepository.create({
-            name: 'Admin',
-            description: 'Administrator role with full access',
-            allowAll: true,
-            isPublic: false,
+            name: 'admin',
+            description: 'Administrador del sistema'
         });
 
-        return this.roleRepository.save(adminRole);
+        await this.roleRepository.save(adminRole);
+        this.logger.log('Role "admin" creado exitosamente.');
+        return adminRole;
     }
 
     private async seedAdminUser(adminRole: Role): Promise<void> {
         const existingUser = await this.userRepository.findOne({ where: { email: 'admin@hemmy.com' } });
         if (existingUser) {
-            console.log(`User with email 'admin@hemmy.com' already exists.`);
+            this.logger.log('Usuario con email "admin@hemmy.com" ya existe.');
             return;
         }
 
@@ -57,6 +66,6 @@ export class DatabaseSeederService {
         });
 
         await this.userRepository.save(adminUser);
-        console.log(`Admin user created successfully.`);
+        this.logger.log('Usuario admin creado exitosamente.');
     }
 }

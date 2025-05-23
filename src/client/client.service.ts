@@ -1,13 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
-import { Client, AccountStatus } from './entities/client.entity';
-import { Payment, PaymentStatus } from '../payments/entities/payment.entity';
+import { Client, AccountStatus, PaymentStatus as ClientEntityPaymentStatus } from './entities/client.entity';
+import { Payment } from '../payments/entities/payment.entity';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { addMonths, differenceInDays, startOfDay } from 'date-fns';
 
 @Injectable()
 export class ClientService {
+  private readonly logger = new Logger(ClientService.name);
+
   constructor(
     @InjectRepository(Client)
     private readonly clientRepository: Repository<Client>,
@@ -15,14 +19,67 @@ export class ClientService {
     private readonly paymentRepository: Repository<Payment>,
   ) { }
 
-  async create(createClientDto: CreateClientDto) {
-    const client = this.clientRepository.create({
-      ...createClientDto,
-      plan: createClientDto.plan ? { id: createClientDto.plan } : null,
-      sector: createClientDto.sector ? { id: createClientDto.sector } : null,
-    });
+  async create(createClientDto: CreateClientDto): Promise<Client> {
+    const clientData: Partial<Client> = {
+      name: createClientDto.name,
+      lastName: createClientDto.lastName,
+      dni: createClientDto.dni,
+      phone: createClientDto.phone,
+      address: createClientDto.address,
+      reference: createClientDto.reference,
+      advancePayment: createClientDto.advancePayment,
+      status: createClientDto.status,
+      description: createClientDto.description,
+      routerSerial: createClientDto.routerSerial,
+      decoSerial: createClientDto.decoSerial,
+      plan: createClientDto.plan ? { id: createClientDto.plan } as any : null,
+      sector: createClientDto.sector ? { id: createClientDto.sector } as any : null,
+    };
 
-    return await this.clientRepository.save(client);
+    if (createClientDto.installationDate) {
+      clientData.installationDate = new Date(`${createClientDto.installationDate}T12:00:00Z`);
+    }
+    if (createClientDto.paymentDate && !createClientDto.advancePayment && !clientData.installationDate) {
+      clientData.paymentDate = new Date(`${createClientDto.paymentDate}T12:00:00Z`);
+    }
+
+    if (clientData.advancePayment && clientData.installationDate) {
+      const baseDate = new Date(clientData.installationDate);
+      baseDate.setMonth(baseDate.getMonth() + 1);
+      clientData.paymentDate = new Date(Date.UTC(
+        baseDate.getFullYear(),
+        baseDate.getMonth(),
+        baseDate.getDate(),
+        12, 0, 0
+      ));
+      clientData.paymentStatus = ClientEntityPaymentStatus.PAID;
+      this.logger.log(`Cliente DNI ${createClientDto.dni} con adelanto. Próximo pago: ${clientData.paymentDate}`);
+    } else if (clientData.advancePayment && !clientData.installationDate) {
+      this.logger.warn(`Cliente DNI ${createClientDto.dni} con adelanto pero sin fecha de instalación. Próximo pago no calculado.`);
+      clientData.paymentStatus = ClientEntityPaymentStatus.PAID;
+    } else {
+      clientData.paymentStatus = ClientEntityPaymentStatus.EXPIRING;
+      if (clientData.installationDate && !clientData.paymentDate) {
+        const baseDate = new Date(clientData.installationDate);
+        baseDate.setMonth(baseDate.getMonth() + 1);
+        clientData.paymentDate = new Date(Date.UTC(
+          baseDate.getFullYear(),
+          baseDate.getMonth(),
+          baseDate.getDate(),
+          12, 0, 0
+        ));
+        this.logger.log(`Cliente DNI ${createClientDto.dni} sin adelanto. Próximo pago por inst.: ${clientData.paymentDate}`);
+      } else if (clientData.paymentDate) {
+        this.logger.log(`Cliente DNI ${createClientDto.dni} sin adelanto. Próximo pago por DTO: ${clientData.paymentDate}`);
+      } else {
+        this.logger.log(`Cliente DNI ${createClientDto.dni} sin adelanto y sin fecha de instalación/prox.pago. Estado: ${clientData.paymentStatus}`);
+      }
+    }
+
+    const client = this.clientRepository.create(clientData);
+    const savedClient = await this.clientRepository.save(client);
+    this.logger.log(`Cliente creado ID ${savedClient.id}, estado inicial: ${savedClient.paymentStatus}, prox. pago: ${savedClient.paymentDate}`);
+    return savedClient;
   }
 
   async findAll(): Promise<Client[]> {
@@ -49,142 +106,136 @@ export class ClientService {
       throw new NotFoundException(`Client with ID ${id} not found`);
     }
 
-    // Calcula el estado general
-    const estadoGeneral = await this.getEstadoGeneralCliente(id);
+    const estadoGeneralCalculado = await this.getEstadoGeneralCliente(id, client);
+    this.logger.debug(`Cliente ID: ${id}, paymentStatus calculado dinámicamente para findOne: ${estadoGeneralCalculado}`);
 
-    console.log(`Cliente ID: ${id}, paymentStatus calculado por getEstadoGeneralCliente: `, estadoGeneral);
-
-    // Retorna el cliente con el estado general SOLO para la respuesta
-    return Object.assign({}, client, { paymentStatus: estadoGeneral });
+    return { ...client, paymentStatusString: estadoGeneralCalculado };
   }
 
   async update(id: number, updateClientDto: UpdateClientDto) {
-    const clientData: Partial<Client> = {};
-
-    if (updateClientDto.name !== undefined) clientData.name = updateClientDto.name;
-    if (updateClientDto.lastName !== undefined) clientData.lastName = updateClientDto.lastName;
-    if (updateClientDto.dni !== undefined) clientData.dni = updateClientDto.dni;
-    if (updateClientDto.phone !== undefined) clientData.phone = updateClientDto.phone;
-    if (updateClientDto.address !== undefined) clientData.address = updateClientDto.address;
-    if (updateClientDto.reference !== undefined) clientData.reference = updateClientDto.reference;
-    if (updateClientDto.advancePayment !== undefined) clientData.advancePayment = updateClientDto.advancePayment;
-    if (updateClientDto.status !== undefined) clientData.status = updateClientDto.status;
-    if (updateClientDto.description !== undefined) clientData.description = updateClientDto.description;
-    if (updateClientDto.decoSerial !== undefined) clientData.decoSerial = updateClientDto.decoSerial;
-    if (updateClientDto.routerSerial !== undefined) clientData.routerSerial = updateClientDto.routerSerial;
-
-    if (updateClientDto.installationDate !== undefined) {
-        clientData.installationDate = updateClientDto.installationDate ? new Date(updateClientDto.installationDate) : null;
-    }
-    if (updateClientDto.paymentDate !== undefined) {
-        clientData.paymentDate = updateClientDto.paymentDate ? new Date(updateClientDto.paymentDate) : null;
-    }
-
-    if (updateClientDto.plan !== undefined) {
-      clientData.plan = updateClientDto.plan ? { id: updateClientDto.plan } as any : null;
-    }
-    if (updateClientDto.sector !== undefined) {
-      clientData.sector = updateClientDto.sector ? { id: updateClientDto.sector } as any : null;
-    }
-
-    const client = await this.clientRepository.preload({
-      id,
-      ...clientData,
-    });
-
-    if (!client) {
+    const clientToUpdate = await this.clientRepository.findOne({ where: { id } });
+    if (!clientToUpdate) {
       throw new NotFoundException(`Client with ID ${id} not found`);
     }
 
-    return await this.clientRepository.save(client);
+    Object.assign(clientToUpdate, updateClientDto);
+
+    if (updateClientDto.installationDate) {
+      clientToUpdate.installationDate = new Date(`${updateClientDto.installationDate}T12:00:00Z`);
+    }
+    if (updateClientDto.paymentDate) {
+      clientToUpdate.paymentDate = new Date(`${updateClientDto.paymentDate}T12:00:00Z`);
+    }
+    if (updateClientDto.plan !== undefined) {
+      clientToUpdate.plan = { id: updateClientDto.plan } as any;
+    }
+    if (updateClientDto.sector !== undefined) {
+      clientToUpdate.sector = { id: updateClientDto.sector } as any;
+    }
+
+    await this.clientRepository.save(clientToUpdate);
+
+    await this.recalculateAndSaveClientPaymentStatus(id);
+    this.logger.log(`Cliente ID ${id} actualizado y estado recalculado.`);
+
+    return this.clientRepository.findOne({ where: { id } });
   }
 
   async remove(id: number) {
-    const client = await this.findOne(id);
+    const client = await this.clientRepository.findOne({ where: { id } });
+    if (!client) {
+      throw new NotFoundException(`Client with ID ${id} not found`);
+    }
     return await this.clientRepository.remove(client);
   }
 
-  async getEstadoGeneralCliente(clienteId: number): Promise<string> {
-    const pagos = await this.paymentRepository.find({
-      where: { client: { id: clienteId } },
-    
-    });
+  async recalculateAndSaveClientPaymentStatus(clienteId: number): Promise<ClientEntityPaymentStatus> {
+    const client = await this.clientRepository.findOne({ where: { id: clienteId } });
+    if (!client) {
+      this.logger.error(`recalculateAndSave: Cliente ID ${clienteId} no encontrado.`);
+      throw new NotFoundException(`Cliente ID ${clienteId} no encontrado para recalcular estado.`);
+    }
+
+    const calculatedStatusString = await this.getEstadoGeneralCliente(clienteId, client);
+    let newPaymentStatus: ClientEntityPaymentStatus;
+
+    switch (calculatedStatusString) {
+      case 'Al día':
+        newPaymentStatus = ClientEntityPaymentStatus.PAID;
+        break;
+      case 'Por vencer':
+        newPaymentStatus = ClientEntityPaymentStatus.EXPIRING;
+        break;
+      case 'Vencido':
+        newPaymentStatus = ClientEntityPaymentStatus.EXPIRED;
+        break;
+      case 'Suspendido':
+        newPaymentStatus = ClientEntityPaymentStatus.SUSPENDED;
+        break;
+      case 'Sin pagos':
+        newPaymentStatus = ClientEntityPaymentStatus.EXPIRING;
+        break;
+      default:
+        this.logger.warn(`Estado desconocido "${calculatedStatusString}" para cliente ID ${clienteId}. Usando EXPIRED por defecto.`);
+        newPaymentStatus = ClientEntityPaymentStatus.EXPIRED;
+    }
+
+    if (client.paymentStatus !== newPaymentStatus) {
+      await this.clientRepository.update(clienteId, { paymentStatus: newPaymentStatus });
+      this.logger.log(`Estado de pago para cliente ID ${clienteId} actualizado en BD a: ${newPaymentStatus} (antes ${client.paymentStatus})`);
+    }
+    return newPaymentStatus;
+  }
+
+  async getEstadoGeneralCliente(clienteId: number, clientEntity?: Client): Promise<string> {
+    const client = clientEntity || await this.clientRepository.findOne({ where: { id: clienteId } });
+
+    if (!client) {
+      throw new NotFoundException(`Cliente con ID ${clienteId} no encontrado para getEstadoGeneralCliente.`);
+    }
 
     const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0); 
-    if (pagos.length === 0) {
-      return 'Sin pagos';
-    }
+    hoy.setUTCHours(12, 0, 0, 0);
 
-    let tienePendiente = false;
-    let tienePorVencer = false;
-    let tieneVencido = false;
-    let tieneSuspendido = false;
+    if (client.advancePayment && client.paymentDate) {
+      const proximoVencimientoAdelantado = new Date(client.paymentDate);
+      proximoVencimientoAdelantado.setUTCHours(12, 0, 0, 0);
 
-    for (const pago of pagos) {
-      const fechaVencimiento = new Date(pago.dueDate);
-      fechaVencimiento.setHours(0, 0, 0, 0);
+      if (proximoVencimientoAdelantado >= hoy) {
+        const diffDaysAdelantado = Math.floor((proximoVencimientoAdelantado.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
 
-      if (pago.state === PaymentStatus.PENDING) {
-        tienePendiente = true;
-        // Continuar para evaluar todos los pagos, la prioridad se encargará del estado final.
+        if (diffDaysAdelantado > 7) return 'Al día';
+        if (diffDaysAdelantado >= 0 && diffDaysAdelantado <= 7) return 'Por vencer';
       }
-
-      if (!pago.paymentDate) { // El pago no se ha realizado
-        // (Si también es PENDIENTE, tienePendiente ya está en true)
-        const diasDesdeVencimiento = Math.ceil((hoy.getTime() - fechaVencimiento.getTime()) / (1000 * 60 * 60 * 24));
-
-        if (diasDesdeVencimiento > 7) { // Más de 7 días después de la fecha de vencimiento
-          tieneSuspendido = true;
-        } else if (diasDesdeVencimiento > 0) { // De 1 a 7 días vencido
-          tieneVencido = true;
-        } else { // Aún no está vencido o vence hoy
-          const diasParaVencer = Math.ceil((fechaVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
-   
-          if (diasParaVencer >= 0 && diasParaVencer < 7) { // Vence en 0-6 días
-            tienePorVencer = true;
-          }
-        }
-      } else {
-        tienePendiente = true;
-      }
-    }
-
-    // Condición para "Al día": el último pago requerido esté completado y al día.
-    // Esto se verifica DESPUÉS de los estados prioritarios.
-    let ultimoPagoRequeridoCompletadoYAlDia = false;
-    if (pagos.length > 0) {
-      // Encontrar la fecha de vencimiento (dueDate) más reciente entre todos los pagos
-      const ultimaFechaVencimientoEpoch = Math.max(...pagos.map(p => new Date(p.dueDate).getTime()));
-      // Filtrar todos los pagos que coincidan con esta última fecha de vencimiento
-      const ultimosPagosRequeridos = pagos.filter(p => new Date(p.dueDate).getTime() === ultimaFechaVencimientoEpoch);
-
-      if (ultimosPagosRequeridos.length > 0) {
-        ultimoPagoRequeridoCompletadoYAlDia = ultimosPagosRequeridos.every(up =>
-          up.paymentDate && // Debe estar pagado
-          up.state !== PaymentStatus.PENDING &&
-          new Date(up.paymentDate).setHours(0,0,0,0) <= new Date(up.dueDate).setHours(0,0,0,0) // Debe pagarse en o antes de la fecha de vencimiento
-        );
-      }
-    }
-
-    // Devolver el estado según la prioridad
-    if (tienePendiente) return 'Pendiente';
-    if (tieneSuspendido) return 'Suspendido'; // Cumple "mas de 7 dias despues de la fecha de pago [vencimiento]"
-    if (tieneVencido) return 'Vencido';
-    if (tienePorVencer) return 'Por vencer';
-
-    // Si llegamos aquí, no hay deudas PENDIENTE, SUSPENDIDO, VENCIDO o POR VENCER.
-    // Esto cumple la parte de "no hay deudas" de la condición "Al día".
-    // Ahora verificamos si "el ultimo pago de la fecha este completado o pagado".
-    if (ultimoPagoRequeridoCompletadoYAlDia) {
+    } else if (client.advancePayment && !client.paymentDate) {
       return 'Al día';
     }
 
-    // Fallback: Si ninguna de las condiciones anteriores se cumple.
-    // Ej: Pagos existen pero no caen en P, S, V, PV y el último no está "completado y al día"
-    // (podría ser un pago futuro no cercano, o un último pago que se hizo tarde pero no hay otras deudas).
-    // La lógica original retornaba 'Sin pagos' aquí.
-    return 'Sin pagos'; // O un estado más descriptivo si es necesario para estos casos.
+    if (!client.paymentDate) {
+      return 'Sin pagos';
+    }
+
+    const proximoVencimiento = new Date(client.paymentDate);
+    proximoVencimiento.setUTCHours(12, 0, 0, 0);
+    const diffDays = Math.floor((proximoVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays > 7) return 'Al día';
+    if (diffDays >= 0 && diffDays <= 7) return 'Por vencer';
+    if (Math.abs(diffDays) > 7) return 'Suspendido';
+    return 'Vencido';
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async handleCronActualizarEstadoClientes() {
+    this.logger.log('Ejecutando cron job para actualizar estado de clientes...');
+    const clients = await this.clientRepository.find({ select: [ 'id' ] });
+    for (const client of clients) {
+      try {
+        await this.recalculateAndSaveClientPaymentStatus(client.id);
+      } catch (error) {
+        this.logger.error(`Error al actualizar estado del cliente ID ${client.id} por cron: ${error.message}`, error.stack);
+      }
+    }
+    this.logger.log('Cron job para actualizar estado de clientes finalizado.');
   }
 }

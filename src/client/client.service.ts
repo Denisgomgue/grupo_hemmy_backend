@@ -111,6 +111,32 @@ export class ClientService {
     const estadoGeneralCalculado = await this.getEstadoGeneralCliente(id, client);
     this.logger.debug(`Cliente ID: ${id}, paymentStatus calculado dinámicamente para findOne: ${estadoGeneralCalculado}`);
 
+    // Convertir el estado calculado al enum correspondiente
+    let newPaymentStatus: ClientEntityPaymentStatus;
+    switch (estadoGeneralCalculado) {
+      case 'Al día':
+        newPaymentStatus = ClientEntityPaymentStatus.PAID;
+        break;
+      case 'Por vencer':
+        newPaymentStatus = ClientEntityPaymentStatus.EXPIRING;
+        break;
+      case 'Vencido':
+        newPaymentStatus = ClientEntityPaymentStatus.EXPIRED;
+        break;
+      case 'Suspendido':
+        newPaymentStatus = ClientEntityPaymentStatus.SUSPENDED;
+        break;
+      default:
+        newPaymentStatus = ClientEntityPaymentStatus.EXPIRING;
+    }
+
+    // Actualizar el estado en la base de datos si ha cambiado
+    if (client.paymentStatus !== newPaymentStatus) {
+      this.logger.log(`Actualizando estado del cliente ${id} de ${client.paymentStatus} a ${newPaymentStatus}`);
+      await this.clientRepository.update(id, { paymentStatus: newPaymentStatus });
+      client.paymentStatus = newPaymentStatus;
+    }
+
     return { ...client, paymentStatusString: estadoGeneralCalculado };
   }
 
@@ -199,20 +225,6 @@ export class ClientService {
     const hoy = new Date();
     hoy.setUTCHours(12, 0, 0, 0);
 
-    if (client.advancePayment && client.paymentDate) {
-      const proximoVencimientoAdelantado = new Date(client.paymentDate);
-      proximoVencimientoAdelantado.setUTCHours(12, 0, 0, 0);
-
-      if (proximoVencimientoAdelantado >= hoy) {
-        const diffDaysAdelantado = Math.floor((proximoVencimientoAdelantado.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
-
-        if (diffDaysAdelantado > 7) return 'Al día';
-        if (diffDaysAdelantado >= 0 && diffDaysAdelantado <= 7) return 'Por vencer';
-      }
-    } else if (client.advancePayment && !client.paymentDate) {
-      return 'Al día';
-    }
-
     if (!client.paymentDate) {
       return 'Sin pagos';
     }
@@ -221,10 +233,27 @@ export class ClientService {
     proximoVencimiento.setUTCHours(12, 0, 0, 0);
     const diffDays = Math.floor((proximoVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
 
-    if (diffDays > 7) return 'Al día';
-    if (diffDays >= 0 && diffDays <= 7) return 'Por vencer';
-    if (Math.abs(diffDays) > 7) return 'Suspendido';
-    return 'Vencido';
+    this.logger.debug(`Cliente ${clienteId}: Días para vencer: ${diffDays}, Fecha próximo pago: ${proximoVencimiento.toISOString()}, Adelantado: ${client.advancePayment}`);
+
+    // Si tiene renta adelantada, es más flexible con los plazos
+    if (client.advancePayment) {
+      if (diffDays > 0) {
+        return 'Al día';
+      } else if (diffDays >= -7) {
+        return 'Por vencer';
+      }
+    }
+
+    // Lógica normal sin renta adelantada
+    if (diffDays > 7) {
+      return 'Al día';
+    } else if (diffDays >= 0) {
+      return 'Por vencer';
+    } else if (diffDays >= -7) {
+      return 'Vencido';
+    }
+    
+    return 'Suspendido';
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)

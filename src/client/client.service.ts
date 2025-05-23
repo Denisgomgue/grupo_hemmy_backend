@@ -7,6 +7,8 @@ import { Client, AccountStatus, PaymentStatus as ClientEntityPaymentStatus } fro
 import { Payment } from '../payments/entities/payment.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { addMonths, differenceInDays, startOfDay } from 'date-fns';
+import { Between } from 'typeorm';
+import { GetClientsSummaryDto } from './dto/get-clients-summary.dto';
 
 @Injectable()
 export class ClientService {
@@ -237,5 +239,56 @@ export class ClientService {
       }
     }
     this.logger.log('Cron job para actualizar estado de clientes finalizado.');
+  }
+
+  async getSummary(getClientsSummaryDto: GetClientsSummaryDto) {
+    this.logger.log('Obteniendo resumen de clientes');
+
+    const { period } = getClientsSummaryDto;
+    let whereConditions: any = {};
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Filtrar por período si es necesario
+    if (period === 'thisMonth') {
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      whereConditions.created_at = Between(firstDayOfMonth, today);
+    } else if (period === 'last7Days') {
+      const sevenDaysAgo = new Date(today);
+      sevenDaysAgo.setDate(today.getDate() - 6);
+      whereConditions.created_at = Between(sevenDaysAgo, today);
+    } else if (period === 'today') {
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+      whereConditions.created_at = Between(today, tomorrow);
+    }
+
+    // Obtener todos los clientes
+    const allClients = await this.clientRepository.find({
+      where: whereConditions
+    });
+
+    // Calcular los contadores
+    const totalClientes = allClients.length;
+    const clientesActivos = allClients.filter(client =>
+      client.status === AccountStatus.ACTIVE &&
+      client.paymentStatus === ClientEntityPaymentStatus.PAID
+    ).length;
+    const clientesVencidos = allClients.filter(client =>
+      client.paymentStatus === ClientEntityPaymentStatus.EXPIRED ||
+      client.paymentStatus === ClientEntityPaymentStatus.SUSPENDED
+    ).length;
+    const clientesPorVencer = allClients.filter(client =>
+      client.paymentStatus === ClientEntityPaymentStatus.EXPIRING
+    ).length;
+
+    return {
+      totalClientes,
+      clientesActivos,
+      clientesVencidos,
+      clientesPorVencer,
+      period: period || 'all'
+    };
   }
 }

@@ -37,4 +37,10 @@ export class ClientController {
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.clientService.remove(id);
   }
+
+  @Post('update-all-states')
+  async updateAllStates() {
+    await this.clientService.handleCronActualizarEstadoClientes();
+    return { message: 'Estados de clientes actualizados correctamente' };
+  }
 }

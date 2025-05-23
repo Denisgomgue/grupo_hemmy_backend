@@ -230,10 +230,14 @@ export class ClientService {
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleCronActualizarEstadoClientes() {
     this.logger.log('Ejecutando cron job para actualizar estado de clientes...');
-    const clients = await this.clientRepository.find({ select: [ 'id' ] });
+    const clients = await this.clientRepository.find({ select: ['id'] });
+    this.logger.log(`Encontrados ${clients.length} clientes para actualizar`);
+    
     for (const client of clients) {
       try {
-        await this.recalculateAndSaveClientPaymentStatus(client.id);
+        const estadoAnterior = (await this.clientRepository.findOne({ where: { id: client.id } })).paymentStatus;
+        const nuevoEstado = await this.recalculateAndSaveClientPaymentStatus(client.id);
+        this.logger.log(`Cliente ID ${client.id}: Estado cambiado de ${estadoAnterior} a ${nuevoEstado}`);
       } catch (error) {
         this.logger.error(`Error al actualizar estado del cliente ID ${client.id} por cron: ${error.message}`, error.stack);
       }

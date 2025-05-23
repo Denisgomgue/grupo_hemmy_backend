@@ -29,8 +29,16 @@ export class PaymentsService {
 
   private determinarEstadoPago(dueDate: string, paymentDate: string): PaymentStatus {
     const hoy = new Date();
+    hoy.setUTCHours(12, 0, 0, 0);
+    
     const fechaVencimiento = new Date(dueDate);
+    fechaVencimiento.setUTCHours(12, 0, 0, 0);
+    
     const fechaPago = paymentDate ? new Date(paymentDate) : null;
+    if (fechaPago) {
+      fechaPago.setUTCHours(12, 0, 0, 0);
+    }
+    
     const diasParaVencer = Math.ceil((fechaVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
     this.logger.debug(`Calculando estado de pago - Fecha pago: ${fechaPago}, Vencimiento: ${fechaVencimiento}, Días para vencer: ${diasParaVencer}`);
 
@@ -64,20 +72,32 @@ export class PaymentsService {
         return;
       }
 
-      // Actualizar el estado a PAGADO
-      client.paymentStatus = ClientPaymentStatus.PAID;
-
       // Calcular la nueva fecha de próximo pago (un mes después de la fecha actual de vencimiento)
       const currentDueDate = new Date(dueDate);
       const nextDueDate = new Date(currentDueDate);
       nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+      nextDueDate.setUTCHours(12, 0, 0, 0); // Estandarizar la hora a mediodía UTC
 
       // Actualizar la fecha de próximo pago
       client.paymentDate = nextDueDate;
 
+      // Calcular el estado basado en la nueva fecha
+      const hoy = new Date();
+      hoy.setUTCHours(12, 0, 0, 0);
+      const diffDays = Math.floor((nextDueDate.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (diffDays > 7) {
+        client.paymentStatus = ClientPaymentStatus.PAID;
+      } else if (diffDays >= 0 && diffDays <= 7) {
+        client.paymentStatus = ClientPaymentStatus.EXPIRING;
+      } else {
+        client.paymentStatus = ClientPaymentStatus.EXPIRED;
+      }
+
+      this.logger.log(`Cliente ${clientId} actualizado: Estado = ${client.paymentStatus}, Próximo pago = ${nextDueDate.toISOString()}`);
+      
       // Guardar los cambios
       await this.clientRepository.save(client);
-      this.logger.log(`Cliente ${clientId} actualizado: Estado = PAID, Próximo pago = ${nextDueDate.toISOString()}`);
     } catch (error) {
       this.logger.error(`Error al actualizar el cliente ${clientId} después del pago: ${error.message}`, error.stack);
     }

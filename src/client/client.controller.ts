@@ -3,6 +3,7 @@ import { ClientService } from './client.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { GetClientsSummaryDto } from './dto/get-clients-summary.dto';
+import { Public } from '../auth/decorators/public.decorator';
 
 @Controller('client')
 export class ClientController {
@@ -38,9 +39,33 @@ export class ClientController {
     return this.clientService.remove(id);
   }
 
+  @Public()
   @Post('update-all-states')
   async updateAllStates() {
-    await this.clientService.handleCronActualizarEstadoClientes();
-    return { message: 'Estados de clientes actualizados correctamente' };
+    const clients = await this.clientService.findAll();
+    const results = [];
+    
+    for (const client of clients) {
+      try {
+        const updatedClient = await this.clientService.updateClientStatus(client.id);
+        results.push({
+          id: client.id,
+          name: client.name,
+          oldStatus: client.paymentStatus,
+          newStatus: updatedClient.paymentStatus
+        });
+      } catch (error) {
+        results.push({
+          id: client.id,
+          name: client.name,
+          error: error.message
+        });
+      }
+    }
+    
+    return {
+      message: 'Estados de clientes actualizados correctamente',
+      results
+    };
   }
 }

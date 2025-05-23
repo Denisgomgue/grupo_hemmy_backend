@@ -295,4 +295,56 @@ export class ClientService {
       period: period || 'all'
     };
   }
+
+  async updateClientStatus(clientId: number) {
+    const client = await this.clientRepository.findOne({ where: { id: clientId } });
+    if (!client) {
+      throw new NotFoundException(`Cliente con ID ${clientId} no encontrado`);
+    }
+
+    const hoy = new Date();
+    hoy.setUTCHours(12, 0, 0, 0);
+
+    // Si tiene renta adelantada y fecha de próximo pago
+    if (client.advancePayment && client.paymentDate) {
+      const proximoPago = new Date(client.paymentDate);
+      proximoPago.setUTCHours(12, 0, 0, 0);
+
+      if (proximoPago >= hoy) {
+        client.paymentStatus = ClientEntityPaymentStatus.PAID;
+      } else {
+        const diffDays = Math.floor((proximoPago.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays >= 0 && diffDays <= 7) {
+          client.paymentStatus = ClientEntityPaymentStatus.EXPIRING;
+        } else if (diffDays < 0) {
+          client.paymentStatus = ClientEntityPaymentStatus.EXPIRED;
+        }
+      }
+    } else if (client.advancePayment) {
+      // Si tiene renta adelantada pero no fecha de próximo pago
+      client.paymentStatus = ClientEntityPaymentStatus.PAID;
+    } else if (client.paymentDate) {
+      // Si no tiene renta adelantada pero sí fecha de próximo pago
+      const proximoPago = new Date(client.paymentDate);
+      proximoPago.setUTCHours(12, 0, 0, 0);
+      
+      const diffDays = Math.floor((proximoPago.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (diffDays > 7) {
+        client.paymentStatus = ClientEntityPaymentStatus.PAID;
+      } else if (diffDays >= 0 && diffDays <= 7) {
+        client.paymentStatus = ClientEntityPaymentStatus.EXPIRING;
+      } else if (Math.abs(diffDays) > 7) {
+        client.paymentStatus = ClientEntityPaymentStatus.SUSPENDED;
+      } else {
+        client.paymentStatus = ClientEntityPaymentStatus.EXPIRED;
+      }
+    } else {
+      // Si no tiene ni renta adelantada ni fecha de próximo pago
+      client.paymentStatus = ClientEntityPaymentStatus.EXPIRING;
+    }
+
+    await this.clientRepository.save(client);
+    return client;
+  }
 }

@@ -7,7 +7,7 @@ export class CreateClientDto {
     phone: string;
     address: string;
     installationDate: string;
-    reference: string;
+    reference?: string;
     paymentDate: string;
     advancePayment: boolean;
     status: AccountStatus;

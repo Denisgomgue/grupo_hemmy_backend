@@ -30,15 +30,15 @@ export class PaymentsService {
   private determinarEstadoPago(dueDate: string, paymentDate: string): PaymentStatus {
     const hoy = new Date();
     hoy.setUTCHours(12, 0, 0, 0);
-    
+
     const fechaVencimiento = new Date(dueDate);
     fechaVencimiento.setUTCHours(12, 0, 0, 0);
-    
+
     const fechaPago = paymentDate ? new Date(paymentDate) : null;
     if (fechaPago) {
       fechaPago.setUTCHours(12, 0, 0, 0);
     }
-    
+
     const diasParaVencer = Math.ceil((fechaVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
     this.logger.debug(`Calculando estado de pago - Fecha pago: ${fechaPago}, Vencimiento: ${fechaVencimiento}, Días para vencer: ${diasParaVencer}`);
 
@@ -95,7 +95,7 @@ export class PaymentsService {
       }
 
       this.logger.log(`Cliente ${clientId} actualizado: Estado = ${client.paymentStatus}, Próximo pago = ${nextDueDate.toISOString()}`);
-      
+
       // Guardar los cambios
       await this.clientRepository.save(client);
     } catch (error) {

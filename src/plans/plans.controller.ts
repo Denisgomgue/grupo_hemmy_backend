@@ -5,7 +5,7 @@ import { UpdatePlanDto } from './dto/update-plan.dto';
 
 @Controller('plans')
 export class PlansController {
-  constructor(private readonly plansService: PlansService) {}
+  constructor(private readonly plansService: PlansService) { }
 
   @Post()
   create(@Body() createPlanDto: CreatePlanDto) {
@@ -15,6 +15,11 @@ export class PlansController {
   @Get()
   findAll() {
     return this.plansService.findAll();
+  }
+
+  @Get('max-price')
+  findMaxPrice() {
+    return this.plansService.findMaxPrice();
   }
 
   @Get(':id')

@@ -14,13 +14,17 @@ export enum PaymentType {
 export enum PaymentStatus {
     PENDING = 'PENDING',
     PAYMENT_DAILY = 'PAYMENT_DAILY',
-    LATE_PAYMENT = 'LATE_PAYMENT'
+    LATE_PAYMENT = 'LATE_PAYMENT',
+    VOIDED = 'VOIDED'
 }
 
 @Entity()
 export class Payment {
     @PrimaryGeneratedColumn()
     id: number;
+
+    @Column({ nullable: true })
+    code: string;
 
     @Column({ nullable: true })
     paymentDate?: Date;
@@ -34,6 +38,12 @@ export class Payment {
 
     @Column('decimal', { precision: 10, scale: 2 })
     amount: number;
+
+    @Column('decimal', { precision: 10, scale: 2 })
+    baseAmount: number;
+
+    @Column('decimal', { precision: 10, scale: 2, default: 0 })
+    reconnectionFee: number;
 
     @Column({ type: 'enum', enum: PaymentStatus, nullable: true })
     state: PaymentStatus;
@@ -59,4 +69,13 @@ export class Payment {
 
     @UpdateDateColumn({ type: "timestamp", default: () => "CURRENT_TIMESTAMP(6)", onUpdate: "CURRENT_TIMESTAMP(6)" })
     public updated_At: Date;
+
+    @Column({ default: false })
+    isVoided: boolean;
+
+    @Column({ nullable: true })
+    voidedAt?: Date;
+
+    @Column({ nullable: true })
+    voidedReason?: string;
 } 

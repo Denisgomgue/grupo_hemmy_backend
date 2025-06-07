@@ -44,6 +44,12 @@ export class Client {
     reference: string;
 
     @Column({ nullable: true })
+    referenceImage: string;
+
+    @Column({ nullable: true })
+    initialPaymentDate: Date;
+
+    @Column({ nullable: true })
     paymentDate: Date;
 
     @Column({ nullable: true })

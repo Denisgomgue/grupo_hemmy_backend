@@ -1,21 +1,24 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between } from 'typeorm';
+import { Repository, Between, Not, IsNull } from 'typeorm';
 import { Payment, PaymentStatus } from './entities/payment.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { GetPaymentsSummaryDto } from './dto/get-payments-summary.dto';
 import { Client, PaymentStatus as ClientPaymentStatus } from '../client/entities/client.entity';
 import { PaymentHistory } from 'src/payment-history/entities/payment-history.entity';
 import { User } from 'src/user/entities/user.entity';
+import { UpdatePaymentDto } from './dto/update-payment.dto';
 
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
+  private readonly RECONNECTION_FEE = 10; // Cargo fijo por reconexión
 
   private readonly estadosEnEspanol = {
     [ PaymentStatus.PENDING ]: 'Pendiente',
     [ PaymentStatus.PAYMENT_DAILY ]: 'Pago al día',
-    [ PaymentStatus.LATE_PAYMENT ]: 'Pago Atrasado'
+    [ PaymentStatus.LATE_PAYMENT ]: 'Pago Atrasado',
+    [ PaymentStatus.VOIDED ]: 'Anulado'
   };
 
   constructor(
@@ -27,38 +30,60 @@ export class PaymentsService {
     private paymentHistoryRepository: Repository<PaymentHistory>,
   ) { }
 
-  private determinarEstadoPago(dueDate: string, paymentDate: string): PaymentStatus {
-    const hoy = new Date();
-    hoy.setUTCHours(12, 0, 0, 0);
-
-    const fechaVencimiento = new Date(dueDate);
-    fechaVencimiento.setUTCHours(12, 0, 0, 0);
-
-    const fechaPago = paymentDate ? new Date(paymentDate) : null;
-    if (fechaPago) {
-      fechaPago.setUTCHours(12, 0, 0, 0);
+  // Helper para manejar números decimales
+  private toFloat(value: any): number {
+    if (value === null || value === undefined || value === '') {
+      return 0;
     }
+    return parseFloat(parseFloat(value.toString()).toFixed(2));
+  }
 
-    const diasParaVencer = Math.ceil((fechaVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
-    this.logger.debug(`Calculando estado de pago - Fecha pago: ${fechaPago}, Vencimiento: ${fechaVencimiento}, Días para vencer: ${diasParaVencer}`);
-
-    if (fechaPago) {
-      if (fechaPago > fechaVencimiento) {
-        return PaymentStatus.LATE_PAYMENT;
-      }
-      return PaymentStatus.PAYMENT_DAILY;
-    } else {
-      if (hoy > fechaVencimiento) {
-        return PaymentStatus.LATE_PAYMENT;
-      } else if (diasParaVencer <= 7) {
-        return PaymentStatus.PENDING;
-      }
+  private determinarEstadoPago(dueDate: string, paymentDate: string | null): PaymentStatus {
+    // Si no hay fecha de pago, el estado es pendiente
+    if (!paymentDate) {
       return PaymentStatus.PENDING;
     }
+
+    const fechaVencimiento = new Date(dueDate);
+    const fechaPago = new Date(paymentDate);
+    fechaVencimiento.setHours(0, 0, 0, 0);
+    fechaPago.setHours(0, 0, 0, 0);
+
+    // Si la fecha de pago es mayor que la fecha de vencimiento, es pago atrasado
+    if (fechaPago > fechaVencimiento) {
+      return PaymentStatus.LATE_PAYMENT;
+    }
+
+    // Si la fecha de pago es menor o igual a la fecha de vencimiento, es pago al día
+    return PaymentStatus.PAYMENT_DAILY;
   }
 
   private transformarEstadoAEspanol(estado: PaymentStatus): string {
     return this.estadosEnEspanol[ estado ] || estado;
+  }
+
+  private normalizeDate(date: string | Date, description: string = ''): Date {
+    // Si es string, asegurarnos de que tenga el formato correcto
+    const inputDate = typeof date === 'string'
+      ? new Date(`${date.split('T')[ 0 ]}T05:00:00.000Z`)
+      : new Date(date);
+
+    // Obtener los componentes de la fecha en UTC
+    const year = inputDate.getUTCFullYear();
+    const month = inputDate.getUTCMonth();
+    const day = inputDate.getUTCDate();
+
+    // Crear una nueva fecha en UTC
+    const normalizedDate = new Date(Date.UTC(year, month, day, 5, 0, 0, 0));
+
+    this.logger.debug(`[${description}] 
+        Input date: ${inputDate.toISOString()}
+        Input UTC date: ${inputDate.getUTCDate()}
+        Normalized date: ${normalizedDate.toISOString()}
+        Day preserved: ${day} === ${normalizedDate.getUTCDate()}
+    `);
+
+    return normalizedDate;
   }
 
   // Método para actualizar el cliente cuando se realiza un pago
@@ -66,56 +91,145 @@ export class PaymentsService {
     if (!clientId) return;
 
     try {
-      const client = await this.clientRepository.findOne({ where: { id: clientId } });
+      const client = await this.clientRepository.findOne({
+        where: { id: clientId },
+        relations: [ 'payments' ]
+      });
+
       if (!client) {
         this.logger.warn(`No se encontró el cliente ID ${clientId} para actualizar después del pago`);
         return;
       }
 
-      // Calcular la nueva fecha de próximo pago (un mes después de la fecha actual de vencimiento)
-      const currentDueDate = new Date(dueDate);
-      const nextDueDate = new Date(currentDueDate);
-      nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-      nextDueDate.setUTCHours(12, 0, 0, 0); // Estandarizar la hora a mediodía UTC
+      this.logger.debug(`Actualizando cliente ${clientId}:
+        Fecha actual de pago: ${client.paymentDate}
+        Fecha inicial de pago: ${client.initialPaymentDate}
+        Nueva fecha de vencimiento: ${dueDate}
+      `);
 
-      // Actualizar la fecha de próximo pago
-      client.paymentDate = nextDueDate;
+      // Actualizar el estado a PAID
+      client.paymentStatus = ClientPaymentStatus.PAID;
 
-      // Calcular el estado basado en la nueva fecha
-      const hoy = new Date();
-      hoy.setUTCHours(12, 0, 0, 0);
-      const diffDays = Math.floor((nextDueDate.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
-
-      if (diffDays > 7) {
-        client.paymentStatus = ClientPaymentStatus.PAID;
-      } else if (diffDays >= 0 && diffDays <= 7) {
-        client.paymentStatus = ClientPaymentStatus.EXPIRING;
-      } else {
-        client.paymentStatus = ClientPaymentStatus.EXPIRED;
+      // Si no tiene fecha inicial de pago, establecerla
+      if (!client.initialPaymentDate) {
+        client.initialPaymentDate = this.normalizeDate(dueDate, 'Estableciendo fecha inicial');
+        this.logger.debug(`Establecida fecha inicial de pago: ${client.initialPaymentDate.toISOString()}`);
       }
 
-      this.logger.log(`Cliente ${clientId} actualizado: Estado = ${client.paymentStatus}, Próximo pago = ${nextDueDate.toISOString()}`);
+      // Calcular la próxima fecha de pago
+      const currentDueDate = this.normalizeDate(dueDate, 'Fecha de vencimiento actual');
+
+      // Crear la próxima fecha de pago manteniendo el día y la hora UTC
+      const nextPaymentDate = new Date(currentDueDate);
+      nextPaymentDate.setUTCMonth(nextPaymentDate.getUTCMonth() + 1);
+
+      this.logger.debug(`Cálculo de próxima fecha de pago:
+        Fecha de vencimiento actual: ${currentDueDate.toISOString()}
+        Día original: ${currentDueDate.getUTCDate()}
+        Próxima fecha calculada: ${nextPaymentDate.toISOString()}
+        Día preservado: ${nextPaymentDate.getUTCDate()} === ${currentDueDate.getUTCDate()}
+      `);
+
+      // Actualizar la fecha de próximo pago
+      client.paymentDate = nextPaymentDate;
 
       // Guardar los cambios
-      await this.clientRepository.save(client);
+      const savedClient = await this.clientRepository.save(client);
+      this.logger.debug(`Cliente guardado:
+        Nueva fecha de pago: ${savedClient.paymentDate.toISOString()}
+        Fecha inicial: ${savedClient.initialPaymentDate.toISOString()}
+        Día preservado: ${savedClient.paymentDate.getUTCDate()} === ${savedClient.initialPaymentDate.getUTCDate()}
+      `);
     } catch (error) {
-      this.logger.error(`Error al actualizar el cliente ${clientId} después del pago: ${error.message}`, error.stack);
+      this.logger.error(`Error al actualizar el cliente ${clientId}: ${error.message}`, error.stack);
     }
+  }
+
+  private async generatePaymentCode(client: Client): Promise<string> {
+    // Obtener la inicial del nombre del cliente
+    const clientInitial = client.name.charAt(0).toUpperCase();
+    const clientLastNameInitial = client.lastName.charAt(0).toUpperCase();
+
+    // Buscar el último pago del cliente para obtener el último número
+    const lastPayment = await this.paymentsRepository.findOne({
+      where: { client: { id: client.id } },
+      order: { created_At: 'DESC' }
+    });
+
+    let nextNumber = 1;
+    if (lastPayment && lastPayment.code) {
+      // Extraer el número del último código
+      const lastNumber = parseInt(lastPayment.code.split('-')[ 1 ]);
+      if (!isNaN(lastNumber)) {
+        nextNumber = lastNumber + 1;
+      }
+    }
+
+    // Formatear el número con ceros a la izquierda (4 dígitos)
+    const formattedNumber = nextNumber.toString().padStart(4, '0');
+
+    // Generar el código final
+    return `PG${clientInitial}${clientLastNameInitial}-${formattedNumber}`;
   }
 
   async create(createPaymentDto: CreatePaymentDto, user?: User) {
     this.logger.log(`Creando nuevo pago para cliente ID ${createPaymentDto.client || 'sin cliente'}`);
 
+    const client = await this.clientRepository.findOne({
+      where: { id: createPaymentDto.client },
+      relations: [ 'plan' ],
+    });
+
+    if (!client) {
+      throw new NotFoundException('Cliente no encontrado');
+    }
+
+    if (!client.plan) {
+      throw new NotFoundException('El cliente no tiene un plan asignado');
+    }
+
+    const paymentCode = await this.generatePaymentCode(client);
+
+    // Convertir todos los montos a float con 2 decimales
+    const baseAmount = this.toFloat(client.plan.price);
+    const reconnectionFee = createPaymentDto.reconnection ? this.toFloat(this.RECONNECTION_FEE) : 0;
+    const discount = this.toFloat(createPaymentDto.discount);
+
+    // Si se proporciona un monto total, usamos ese, de lo contrario calculamos
+    let totalAmount = createPaymentDto.amount ? this.toFloat(createPaymentDto.amount) : 0;
+
+    // Si no se proporciona un monto total, lo calculamos
+    if (!totalAmount) {
+      totalAmount = this.toFloat(baseAmount + reconnectionFee - discount);
+    }
+
+    this.logger.debug(`Desglose del pago:
+      - Monto base (plan): S/. ${baseAmount}
+      - Cargo reconexión: S/. ${reconnectionFee}
+      - Descuento: S/. ${discount}
+      - Total: S/. ${totalAmount}
+    `);
+
+    // Normalizar las fechas usando nuestro método
+    const paymentDate = createPaymentDto.paymentDate
+      ? this.normalizeDate(createPaymentDto.paymentDate, 'Fecha de pago en create')
+      : undefined;
+
+    const dueDate = createPaymentDto.dueDate
+      ? this.normalizeDate(createPaymentDto.dueDate, 'Fecha de vencimiento en create')
+      : undefined;
+
     const paymentData = {
       ...createPaymentDto,
-      paymentDate: createPaymentDto.paymentDate ? new Date(`${createPaymentDto.paymentDate}T12:00:00Z`) : undefined,
-      discount: createPaymentDto.discount === undefined ? 0 : createPaymentDto.discount,
-      client: createPaymentDto.client === undefined ? undefined : { id: createPaymentDto.client }
+      code: paymentCode,
+      paymentDate,
+      dueDate,
+      discount: this.toFloat(discount),
+      client,
+      baseAmount: this.toFloat(baseAmount),
+      reconnectionFee: this.toFloat(reconnectionFee),
+      amount: this.toFloat(totalAmount)
     };
-
-    if (paymentData.client === undefined) {
-      delete paymentData.client;
-    }
 
     const payment = this.paymentsRepository.create(paymentData);
 
@@ -156,16 +270,31 @@ export class PaymentsService {
     };
   }
 
-  async findAll(clientId?: number) {
-    let query = {};
+  async findAll(clientId?: number, includeVoided: boolean = false) {
+    let query: any = {};
 
     if (clientId) {
-      query = { client: { id: clientId } };
+      query.client = { id: clientId };
+    }
+
+    if (!includeVoided) {
+      query.isVoided = false;
     }
 
     const payments = await this.paymentsRepository.find({
       where: query,
-      relations: [ 'client' ]
+      relations: [ 'client' ],
+      select: {
+        client: {
+          id: true,
+          name: true,
+          lastName: true,
+          dni: true
+        }
+      },
+      order: {
+        created_At: 'DESC'
+      }
     });
 
     return payments.map(payment => ({
@@ -185,48 +314,68 @@ export class PaymentsService {
     };
   }
 
-  async update(id: number, updatePaymentDto: Partial<CreatePaymentDto>, user?: User) {
+  async update(id: number, updatePaymentDto: UpdatePaymentDto, user?: User) {
     this.logger.log(`Actualizando pago ID ${id}`);
 
     const payment = await this.paymentsRepository.findOne({
       where: { id },
-      relations: [ 'client' ]
+      relations: [ 'client', 'client.plan' ]
     });
 
     if (!payment) {
-      this.logger.warn(`Intento de actualizar pago inexistente ID ${id}`);
       throw new NotFoundException(`Pago con ID ${id} no encontrado`);
     }
 
-    const updateData = {
+    // Convertir todos los montos a float con 2 decimales
+    const baseAmount = this.toFloat(payment.client.plan.price);
+    const reconnectionFee = updatePaymentDto.reconnection !== undefined ?
+      (updatePaymentDto.reconnection ? this.toFloat(this.RECONNECTION_FEE) : 0) :
+      (payment.reconnection ? this.toFloat(this.RECONNECTION_FEE) : 0);
+    const discount = this.toFloat(updatePaymentDto.discount !== undefined ? updatePaymentDto.discount : payment.discount);
+
+    // Calcular el monto total
+    const totalAmount = this.toFloat(baseAmount + reconnectionFee - discount);
+
+    this.logger.debug(`Actualizando montos del pago ID ${id}:
+      - Monto base (plan): S/. ${baseAmount}
+      - Cargo reconexión: S/. ${reconnectionFee}
+      - Descuento: S/. ${discount}
+      - Total: S/. ${totalAmount}
+    `);
+
+    // Actualizar el pago existente con los nuevos valores
+    Object.assign(payment, {
       ...updatePaymentDto,
-      client: updatePaymentDto.client ? { id: updatePaymentDto.client } : undefined
-    };
+      baseAmount: this.toFloat(baseAmount),
+      reconnectionFee: this.toFloat(reconnectionFee),
+      amount: this.toFloat(totalAmount),
+      discount: this.toFloat(discount)
+    });
 
-    await this.paymentsRepository.update(id, updateData);
-    this.logger.debug(`Datos básicos del pago ID ${id} actualizados`);
-
-    // Si se está estableciendo una fecha de pago y el pago tiene cliente
-    if (updatePaymentDto.paymentDate && (payment.client || updatePaymentDto.client)) {
-      const clientId = updatePaymentDto.client || payment.client.id;
-      const dueDate = updatePaymentDto.dueDate || payment.dueDate.toISOString();
-      this.logger.debug(`Actualizando estado del cliente ID ${clientId} después de actualizar pago ID ${id}`);
-      await this.updateClientAfterPayment(clientId, dueDate);
+    if (updatePaymentDto.paymentDate) {
+      payment.paymentDate = new Date(`${updatePaymentDto.paymentDate}T12:00:00Z`);
     }
 
-    const updatedPayment = await this.findOne(id);
+    const updatedPayment = await this.paymentsRepository.save(payment);
+
+    // Si se está estableciendo una fecha de pago y el pago tiene cliente
+    if (updatePaymentDto.paymentDate && payment.client) {
+      const dueDate = updatePaymentDto.dueDate || payment.dueDate.toISOString();
+      this.logger.debug(`Actualizando estado del cliente ID ${payment.client.id} después de actualizar pago ID ${id}`);
+      await this.updateClientAfterPayment(payment.client.id, dueDate);
+    }
 
     // Guardar en el historial de pagos
     const history = this.paymentHistoryRepository.create({
       payment: payment,
       client: payment.client,
       user: user || null,
-      amount: updatePaymentDto.amount ?? payment.amount,
-      discount: updatePaymentDto.discount ?? payment.discount,
-      paymentDate: updatePaymentDto.paymentDate ?? payment.paymentDate,
-      dueDate: updatePaymentDto.dueDate ?? payment.dueDate,
-      reference: updatePaymentDto.reference ?? payment.reference,
-      paymentType: updatePaymentDto.paymentType ?? payment.paymentType,
+      amount: totalAmount,
+      discount: discount,
+      paymentDate: payment.paymentDate,
+      dueDate: payment.dueDate,
+      reference: payment.reference,
+      paymentType: payment.paymentType,
     });
     await this.paymentHistoryRepository.save(history);
     this.logger.log(`Historial de actualización creado para pago ID ${id}`);
@@ -242,7 +391,73 @@ export class PaymentsService {
     if (!payment) {
       throw new NotFoundException(`Pago con ID ${id} no encontrado`);
     }
-    // Guardar en el historial de pagos antes de eliminar
+
+    const clientId = payment.client?.id;
+    payment.isVoided = true;
+    payment.voidedAt = new Date();
+    payment.state = PaymentStatus.VOIDED;
+    await this.paymentsRepository.save(payment);
+
+    if (clientId) {
+      const client = await this.clientRepository.findOne({
+        where: { id: clientId },
+        relations: [ 'payments' ]
+      });
+
+      if (client) {
+        this.logger.debug(`Procesando anulación para cliente ${clientId}:
+          Fecha actual de pago: ${client.paymentDate}
+          Fecha inicial de pago: ${client.initialPaymentDate}
+        `);
+
+        // Obtener el último pago válido
+        const lastValidPayment = await this.paymentsRepository.findOne({
+          where: {
+            client: { id: clientId },
+            isVoided: false
+          },
+          order: { dueDate: 'DESC' }
+        });
+
+        if (lastValidPayment && lastValidPayment.dueDate) {
+          this.logger.debug(`Encontrado último pago válido:
+            ID: ${lastValidPayment.id}
+            Fecha vencimiento: ${lastValidPayment.dueDate}
+          `);
+
+          const nextPaymentDate = this.normalizeDate(lastValidPayment.dueDate, 'Próximo pago desde último válido');
+          nextPaymentDate.setUTCMonth(nextPaymentDate.getUTCMonth() + 1);
+          client.paymentDate = nextPaymentDate;
+        } else if (client.initialPaymentDate) {
+          this.logger.debug('No hay pagos válidos, usando fecha inicial');
+
+          const baseDate = this.normalizeDate(client.initialPaymentDate, 'Fecha inicial base');
+          const today = new Date();
+          today.setUTCHours(12, 0, 0, 0);
+
+          const monthsDiff = (today.getUTCFullYear() - baseDate.getUTCFullYear()) * 12
+            + (today.getUTCMonth() - baseDate.getUTCMonth());
+
+          const nextPaymentDate = new Date(baseDate);
+          nextPaymentDate.setUTCMonth(baseDate.getUTCMonth() + monthsDiff + 1);
+
+          this.logger.debug(`Calculando desde fecha inicial:
+            Meses transcurridos: ${monthsDiff}
+            Próxima fecha calculada: ${nextPaymentDate.toISOString()}
+          `);
+
+          client.paymentDate = nextPaymentDate;
+        }
+
+        const savedClient = await this.clientRepository.save(client);
+        this.logger.debug(`Cliente actualizado después de anulación:
+          Nueva fecha de pago: ${savedClient.paymentDate}
+          Fecha inicial: ${savedClient.initialPaymentDate}
+        `);
+      }
+    }
+
+    // Guardar en historial
     const history = this.paymentHistoryRepository.create({
       payment: payment,
       client: payment.client,
@@ -251,11 +466,19 @@ export class PaymentsService {
       discount: payment.discount,
       paymentDate: payment.paymentDate,
       dueDate: payment.dueDate,
-      reference: payment.reference,
+      reference: `ANULADO - ${payment.reference || ''}`,
       paymentType: payment.paymentType,
     });
     await this.paymentHistoryRepository.save(history);
-    return this.paymentsRepository.remove(payment);
+
+    return {
+      success: true,
+      message: 'Pago anulado correctamente',
+      payment: {
+        ...payment,
+        stateInSpanish: this.transformarEstadoAEspanol(payment.state)
+      }
+    };
   }
 
   async getSummary(getPaymentsSummaryDto: GetPaymentsSummaryDto) {
@@ -312,6 +535,159 @@ export class PaymentsService {
       pagosPendientes,
       pagosAtrasados,
       period: period || 'all'
+    };
+  }
+
+  async getLastPaymentDate(clientId: number) {
+    this.logger.log(`Buscando última fecha de pago para cliente ID ${clientId}`);
+
+    const lastPayment = await this.paymentHistoryRepository.findOne({
+      where: {
+        client: { id: clientId },
+        paymentDate: Not(IsNull())
+      },
+      order: {
+        paymentDate: 'DESC'
+      }
+    });
+
+    if (!lastPayment) {
+      this.logger.debug(`No se encontraron pagos para el cliente ID ${clientId}`);
+      return null;
+    }
+
+    this.logger.debug(`Última fecha de pago encontrada: ${lastPayment.paymentDate}`);
+    return {
+      lastPaymentDate: lastPayment.paymentDate,
+      amount: lastPayment.amount,
+      discount: lastPayment.discount,
+      reference: lastPayment.reference,
+      paymentType: lastPayment.paymentType
+    };
+  }
+
+  // Método para obtener el desglose de un pago
+  async getPaymentBreakdown(id: number) {
+    const payment = await this.paymentsRepository.findOne({
+      where: { id },
+      relations: [ 'client', 'client.plan' ]
+    });
+
+    if (!payment) {
+      throw new NotFoundException(`Pago con ID ${id} no encontrado`);
+    }
+
+    return {
+      total: payment.amount,
+      breakdown: {
+        planAmount: payment.baseAmount,
+        reconnectionFee: payment.reconnectionFee,
+        discount: payment.discount || 0
+      },
+      details: {
+        planName: payment.client.plan.name,
+        includesReconnection: payment.reconnection,
+        paymentDate: payment.paymentDate,
+        dueDate: payment.dueDate
+      }
+    };
+  }
+
+  // Método para recalcular estados de pagos existentes
+  async recalculateAllPaymentStates() {
+    this.logger.log('Iniciando recálculo de estados de todos los pagos');
+
+    const payments = await this.paymentsRepository.find({
+      relations: [ 'client' ]
+    });
+
+    let updated = 0;
+    let errors = 0;
+
+    for (const payment of payments) {
+      try {
+        if (!payment.dueDate) {
+          this.logger.warn(`Pago ID ${payment.id} no tiene fecha de vencimiento, se mantiene estado actual`);
+          continue;
+        }
+
+        const newState = this.determinarEstadoPago(
+          payment.dueDate.toISOString(),
+          payment.paymentDate ? payment.paymentDate.toISOString() : null
+        );
+
+        if (payment.state !== newState) {
+          payment.state = newState;
+          await this.paymentsRepository.save(payment);
+          updated++;
+          this.logger.debug(`Pago ID ${payment.id} actualizado a estado: ${newState}`);
+        }
+      } catch (error) {
+        errors++;
+        this.logger.error(`Error actualizando pago ID ${payment.id}: ${error.message}`);
+      }
+    }
+
+    return {
+      total: payments.length,
+      updated,
+      errors,
+      message: `Se procesaron ${payments.length} pagos. ${updated} actualizados. ${errors} errores.`
+    };
+  }
+
+  // Método para regenerar códigos de pago
+  async regeneratePaymentCodes() {
+    this.logger.log('Iniciando regeneración de códigos de pago');
+
+    const payments = await this.paymentsRepository.find({
+      relations: [ 'client' ],
+      order: {
+        client: { id: 'ASC' },
+        created_At: 'ASC'
+      }
+    });
+
+    let updated = 0;
+    let errors = 0;
+    let currentClientId = null;
+    let currentSequence = 1;
+
+    for (const payment of payments) {
+      try {
+        if (!payment.client) {
+          this.logger.warn(`Pago ID ${payment.id} no tiene cliente asociado, se usará código genérico`);
+          const formattedNumber = payment.id.toString().padStart(4, '0');
+          payment.code = `PGXX-${formattedNumber}`;
+        } else {
+          // Si cambiamos de cliente, reiniciamos la secuencia
+          if (currentClientId !== payment.client.id) {
+            currentClientId = payment.client.id;
+            currentSequence = 1;
+          }
+
+          const clientInitial = payment.client.name.charAt(0).toUpperCase();
+          const clientLastNameInitial = payment.client.lastName.charAt(0).toUpperCase();
+          const formattedNumber = currentSequence.toString().padStart(4, '0');
+          payment.code = `PG${clientInitial}${clientLastNameInitial}-${formattedNumber}`;
+
+          currentSequence++;
+        }
+
+        await this.paymentsRepository.save(payment);
+        updated++;
+        this.logger.debug(`Pago ID ${payment.id} actualizado con código: ${payment.code}`);
+      } catch (error) {
+        errors++;
+        this.logger.error(`Error actualizando pago ID ${payment.id}: ${error.message}`);
+      }
+    }
+
+    return {
+      total: payments.length,
+      updated,
+      errors,
+      message: `Se procesaron ${payments.length} pagos. ${updated} actualizados. ${errors} errores.`
     };
   }
 }

@@ -3,6 +3,10 @@ import { PaymentStatus, PaymentType } from '../entities/payment.entity';
 
 export class CreatePaymentDto {
   @IsOptional()
+  @IsString()
+  code?: string;
+
+  @IsOptional()
   @IsDateString() // Cambiamos a IsDateString para validar el formato de fecha
   paymentDate?: string;
 
@@ -11,8 +15,9 @@ export class CreatePaymentDto {
   @IsString()
   transfername?: string;
 
+  @IsOptional()
   @IsString()
-  reference: string;
+  reference?: string;
 
   @IsBoolean()
   reconnection: boolean;
@@ -22,6 +27,16 @@ export class CreatePaymentDto {
   amount: number;
 
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  baseAmount?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  reconnectionFee?: number;
+
+  @IsOptional()
   @IsEnum(PaymentType)
   paymentType?: PaymentType;
 
@@ -29,6 +44,8 @@ export class CreatePaymentDto {
   // Si necesitas recibirlo, debe ser opcional y validado.
 
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   discount?: number;
   @IsOptional()
   @IsNumber()

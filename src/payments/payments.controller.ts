@@ -36,4 +36,14 @@ export class PaymentsController {
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.paymentsService.remove(id);
   }
+
+  @Post('recalculate-states')
+  recalculateStates() {
+    return this.paymentsService.recalculateAllPaymentStates();
+  }
+
+  @Post('regenerate-codes')
+  regenerateCodes() {
+    return this.paymentsService.regeneratePaymentCodes();
+  }
 }

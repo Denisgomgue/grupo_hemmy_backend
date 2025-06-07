@@ -26,6 +26,7 @@ import { PermissionModule } from "./permission/permission.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { Payment } from "./payments/entities/payment.entity";
 import { PaymentHistory } from "./payment-history/entities/payment-history.entity";
+import { UploadModule } from './upload/upload.module';
 
 
 @Module({
@@ -65,8 +66,8 @@ import { PaymentHistory } from "./payment-history/entities/payment-history.entit
     RoleHasPermissionsModule,
     RoleModule,
     PermissionModule,
-    PaymentsModule
-
+    PaymentsModule,
+    UploadModule,
   ],
   controllers: [ AppController ],
   providers: [

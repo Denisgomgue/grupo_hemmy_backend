@@ -13,7 +13,7 @@ export class PlansService {
     private readonly planRepository: Repository<Plan>,
     @InjectRepository(Service)
     private readonly serviceRepository: Repository<Service>,
-  ) {}
+  ) { }
 
   async create(createPlanDto: CreatePlanDto) {
     const service = await this.serviceRepository.findOne({
@@ -27,7 +27,7 @@ export class PlansService {
     // Convertir speed a número si existe
     const speedAsNumber = createPlanDto.speed ? parseFloat(createPlanDto.speed) : undefined;
     if (createPlanDto.speed && isNaN(speedAsNumber)) {
-        throw new Error('La velocidad proporcionada no es un número válido.'); // O manejar el error como prefieras
+      throw new Error('La velocidad proporcionada no es un número válido.'); // O manejar el error como prefieras
     }
 
     // Crear el plan asegurándose de que speed sea number y asignando el objeto service
@@ -45,14 +45,14 @@ export class PlansService {
 
   findAll() {
     return this.planRepository.find({
-      relations: ['service']
+      relations: [ 'service' ]
     });
   }
 
   async findOne(id: number) {
     const plan = await this.planRepository.findOne({
       where: { id },
-      relations: ['service']
+      relations: [ 'service' ]
     });
 
     if (!plan) {
@@ -82,5 +82,19 @@ export class PlansService {
   async remove(id: number) {
     const plan = await this.findOne(id);
     return this.planRepository.remove(plan);
+  }
+
+  async findMaxPrice(): Promise<number> {
+    try {
+      const result = await this.planRepository
+        .createQueryBuilder('plan')
+        .select('COALESCE(MAX(plan.price), 0)', 'maxPrice')
+        .getRawOne();
+
+      return result?.maxPrice || 0;
+    } catch (error) {
+      console.error('Error al obtener el precio máximo:', error);
+      return 0;
+    }
   }
 }

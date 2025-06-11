@@ -214,4 +214,17 @@ export class ClientController {
       throw error;
     }
   }
+
+  @Post('sync-states')
+  async syncStates() {
+    try {
+      const result = await this.clientService.syncAllClientsPaymentStatus();
+      return {
+        message: 'Estados de clientes sincronizados correctamente',
+        status: 'success'
+      };
+    } catch (error) {
+      throw new BadRequestException('Error al sincronizar los estados de los clientes');
+    }
+  }
 }

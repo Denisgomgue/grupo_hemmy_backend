@@ -1,6 +1,14 @@
+/**
+ * Servicio para la gestión de clientes
+ * Este servicio maneja todas las operaciones relacionadas con los clientes:
+ * - CRUD de clientes
+ * - Gestión de estados de pago
+ * - Gestión de imágenes de referencia
+ * - Cálculos automáticos de estados
+ */
 import { Injectable, NotFoundException, Logger, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Not } from 'typeorm';
+import { Repository, DataSource, Not, Between } from 'typeorm';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { Client, AccountStatus, PaymentStatus as ClientEntityPaymentStatus } from './entities/client.entity';
@@ -8,10 +16,14 @@ import { Payment, PaymentStatus } from '../payments/entities/payment.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { addMonths, differenceInDays, startOfDay } from 'date-fns';
 import { GetClientsSummaryDto } from './dto/get-clients-summary.dto';
-import { Between } from 'typeorm';
 import { join } from 'path';
 import * as fs from 'fs/promises';
 
+/**
+ * Utilidad para convertir diferentes tipos de valores a booleano
+ * @param value - Valor a convertir
+ * @returns boolean
+ */
 const convertToBoolean = (value: any): boolean => {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'string') return value === '1' || value.toLowerCase() === 'true';
@@ -32,6 +44,11 @@ export class ClientService {
     private readonly dataSource: DataSource
   ) { }
 
+  /**
+   * Verifica si un DNI ya existe en la base de datos
+   * @param dni - DNI a verificar
+   * @param excludeId - ID del cliente a excluir de la búsqueda (para actualizaciones)
+   */
   async checkDniExists(dni: string, excludeId?: number): Promise<boolean> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -54,17 +71,87 @@ export class ClientService {
     }
   }
 
+  /**
+   * Calcula el estado de pago según las reglas de negocio
+   * @param paymentDate - Fecha de próximo pago
+   * @param isAdvancePayment - Si el cliente tiene pago adelantado
+   * @returns Object con el estado y descripción
+   */
+  private calculatePaymentStatus(
+    paymentDate: Date | null,
+    isAdvancePayment: boolean
+  ): { status: ClientEntityPaymentStatus; description: string } {
+    const today = startOfDay(new Date());
+
+    // Si no hay fecha de pago
+    if (!paymentDate) {
+      return {
+        status: ClientEntityPaymentStatus.EXPIRING,
+        description: 'Sin fecha de pago'
+      };
+    }
+
+    const paymentDateStart = startOfDay(new Date(paymentDate));
+    const daysUntilPayment = differenceInDays(paymentDateStart, today);
+
+    // Lógica para pago adelantado
+    if (isAdvancePayment) {
+      if (daysUntilPayment > 7) {
+        return {
+          status: ClientEntityPaymentStatus.PAID,
+          description: 'Pagado'
+        };
+      }
+      if (daysUntilPayment >= 0) {
+        return {
+          status: ClientEntityPaymentStatus.EXPIRING,
+          description: 'Por vencer'
+        };
+      }
+    }
+
+    // Lógica para pago normal
+    if (daysUntilPayment > 7) {
+      return {
+        status: ClientEntityPaymentStatus.PAID,
+        description: 'Pagado'
+      };
+    }
+    if (daysUntilPayment >= 0) {
+      return {
+        status: ClientEntityPaymentStatus.EXPIRING,
+        description: 'Por vencer'
+      };
+    }
+    if (daysUntilPayment >= -7) {
+      return {
+        status: ClientEntityPaymentStatus.EXPIRED,
+        description: 'Vencido'
+      };
+    }
+    return {
+      status: ClientEntityPaymentStatus.SUSPENDED,
+      description: 'Suspendido'
+    };
+  }
+
+  /**
+   * Crea un nuevo cliente con manejo de transacciones
+   * Incluye validación de DNI y cálculo inicial de estado de pago
+   */
   async createWithTransaction(createClientDto: CreateClientDto): Promise<Client> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction('SERIALIZABLE');
 
     try {
+      // Validación de DNI único
       const dniExists = await queryRunner.manager.exists(Client, { where: { dni: createClientDto.dni } });
       if (dniExists) {
         throw new ConflictException(`El DNI ${createClientDto.dni} ya está registrado.`);
       }
 
+      // Preparación de datos del cliente
       const clientData: Partial<Client> = {
         name: createClientDto.name,
         lastName: createClientDto.lastName,
@@ -83,30 +170,19 @@ export class ClientService {
         referenceImage: createClientDto.referenceImage
       };
 
+      // Cálculo del estado de pago inicial
       if (createClientDto.paymentDate) {
         const paymentDate = new Date(`${createClientDto.paymentDate}T12:00:00Z`);
         clientData.paymentDate = paymentDate;
         clientData.initialPaymentDate = paymentDate;
 
-        const today = startOfDay(new Date());
+        const { status, description } = this.calculatePaymentStatus(
+          paymentDate,
+          createClientDto.advancePayment
+        );
 
-        if (createClientDto.advancePayment) {
-          clientData.paymentStatus = ClientEntityPaymentStatus.PAID;
-          this.logger.log(`Cliente DNI ${createClientDto.dni} con pago adelantado. Estado: PAID`);
-        } else {
-          const daysUntilPayment = differenceInDays(paymentDate, today);
-
-          if (daysUntilPayment < 0) {
-            clientData.paymentStatus = ClientEntityPaymentStatus.EXPIRED;
-            this.logger.log(`Cliente DNI ${createClientDto.dni} con fecha vencida. Estado: EXPIRED`);
-          } else if (daysUntilPayment <= 7) {
-            clientData.paymentStatus = ClientEntityPaymentStatus.EXPIRING;
-            this.logger.log(`Cliente DNI ${createClientDto.dni} próximo a vencer. Estado: EXPIRING`);
-          } else {
-            clientData.paymentStatus = ClientEntityPaymentStatus.PAID;
-            this.logger.log(`Cliente DNI ${createClientDto.dni} al día. Estado: PAID`);
-          }
-        }
+        clientData.paymentStatus = status;
+        this.logger.log(`Cliente DNI ${createClientDto.dni} - ${description}. Estado: ${status}`);
       } else {
         clientData.paymentStatus = ClientEntityPaymentStatus.EXPIRING;
         this.logger.warn(`Cliente DNI ${createClientDto.dni} sin fecha de próximo pago. Estado: EXPIRING`);
@@ -131,6 +207,17 @@ export class ClientService {
     }
   }
 
+  /**
+   * Busca clientes con filtros y paginación
+   * @param page - Número de página
+   * @param limit - Límite de resultados por página
+   * @param search - Término de búsqueda
+   * @param status - Filtro por estado
+   * @param services - Filtro por servicios
+   * @param minCost - Costo mínimo
+   * @param maxCost - Costo máximo
+   * @param sectors - Filtro por sectores
+   */
   async findAll(
     page: number = 1,
     limit: number = 10,
@@ -147,8 +234,10 @@ export class ClientService {
       .createQueryBuilder('client')
       .leftJoinAndSelect('client.plan', 'plan')
       .leftJoinAndSelect('plan.service', 'service')
-      .leftJoinAndSelect('client.sector', 'sector');
+      .leftJoinAndSelect('client.sector', 'sector')
+      .orderBy('client.created_at', 'DESC');
 
+    // Aplicar filtros de búsqueda
     if (search) {
       queryBuilder.andWhere(
         '(LOWER(client.name) LIKE LOWER(:search) OR ' +
@@ -192,6 +281,10 @@ export class ClientService {
     };
   }
 
+  /**
+   * Busca un cliente por ID y calcula su estado general
+   * @param id - ID del cliente
+   */
   async findOne(id: number) {
     const client = await this.clientRepository
       .createQueryBuilder('client')
@@ -211,6 +304,10 @@ export class ClientService {
     return { ...client, paymentStatusString: estadoGeneralCalculado };
   }
 
+  /**
+   * Actualiza un cliente existente
+   * Incluye manejo de transacciones y actualización de imágenes
+   */
   async update(id: number, updateClientDto: UpdateClientDto): Promise<Client> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -222,6 +319,7 @@ export class ClientService {
         throw new NotFoundException(`Client with ID ${id} not found`);
       }
 
+      // Validación de DNI único
       if (updateClientDto.dni && updateClientDto.dni !== clientToUpdate.dni) {
         const dniExistsInOtherClient = await queryRunner.manager.exists(Client, {
           where: {
@@ -235,63 +333,19 @@ export class ClientService {
         clientToUpdate.dni = updateClientDto.dni;
       }
 
-      clientToUpdate.name = updateClientDto.name ?? clientToUpdate.name;
-      clientToUpdate.lastName = updateClientDto.lastName ?? clientToUpdate.lastName;
-      clientToUpdate.phone = updateClientDto.phone ?? clientToUpdate.phone;
-      clientToUpdate.address = updateClientDto.address ?? clientToUpdate.address;
-      clientToUpdate.reference = updateClientDto.reference ?? clientToUpdate.reference;
+      // Actualización de campos básicos
+      this.updateBasicFields(clientToUpdate, updateClientDto);
 
-      // Manejar advancePayment usando la función auxiliar
-      if ('advancePayment' in updateClientDto) {
-        const boolValue = convertToBoolean(updateClientDto.advancePayment);
-        clientToUpdate.advancePayment = boolValue;
-        this.logger.log(`Actualizando advancePayment:`, {
-          valorRecibido: updateClientDto.advancePayment,
-          tipo: typeof updateClientDto.advancePayment,
-          valorFinal: boolValue
-        });
-      }
-
-      if (updateClientDto.status) {
-        clientToUpdate.status = updateClientDto.status;
-      }
-      clientToUpdate.description = updateClientDto.description ?? clientToUpdate.description;
-      clientToUpdate.routerSerial = updateClientDto.routerSerial ?? clientToUpdate.routerSerial;
-      clientToUpdate.decoSerial = updateClientDto.decoSerial ?? clientToUpdate.decoSerial;
-
-      if (updateClientDto.installationDate) {
-        clientToUpdate.installationDate = new Date(`${updateClientDto.installationDate}T12:00:00Z`);
-      }
-      if (updateClientDto.paymentDate) {
-        clientToUpdate.paymentDate = new Date(`${updateClientDto.paymentDate}T12:00:00Z`);
-      }
-      if (updateClientDto.plan !== undefined) {
-        clientToUpdate.plan = updateClientDto.plan ? { id: updateClientDto.plan } as any : null;
-      }
-      if (updateClientDto.sector !== undefined) {
-        clientToUpdate.sector = updateClientDto.sector ? { id: updateClientDto.sector } as any : null;
-      }
-
-      const newImagePath = updateClientDto.referenceImage;
-      const oldImagePath = clientToUpdate.referenceImage;
-
-      if (newImagePath !== oldImagePath) {
-        if (oldImagePath) {
-          const fullOldPath = join(process.cwd(), oldImagePath);
-          try {
-            await fs.unlink(fullOldPath);
-            this.logger.log(`Imagen antigua eliminada: ${fullOldPath}`);
-          } catch (error) {
-            this.logger.warn(`Error al eliminar la imagen antigua ${fullOldPath}: ${error.message}`);
-          }
-        }
-        clientToUpdate.referenceImage = newImagePath;
+      // Manejo de imagen de referencia
+      if (updateClientDto.referenceImage !== clientToUpdate.referenceImage) {
+        await this.handleReferenceImageUpdate(clientToUpdate, updateClientDto.referenceImage);
       }
 
       const savedClient = await queryRunner.manager.save(Client, clientToUpdate);
       await queryRunner.commitTransaction();
       this.logger.log(`Cliente ID ${id} actualizado. DNI: ${savedClient.dni}`);
 
+      // Recálculo de estado
       try {
         await this.recalculateAndSaveClientPaymentStatus(id);
         this.logger.log(`Estado del cliente ID ${id} recalculado post-actualización.`);
@@ -314,6 +368,62 @@ export class ClientService {
     }
   }
 
+  /**
+   * Actualiza los campos básicos de un cliente
+   * Método auxiliar para update()
+   */
+  private updateBasicFields(client: Client, updateDto: UpdateClientDto): void {
+    client.name = updateDto.name ?? client.name;
+    client.lastName = updateDto.lastName ?? client.lastName;
+    client.phone = updateDto.phone ?? client.phone;
+    client.address = updateDto.address ?? client.address;
+    client.reference = updateDto.reference ?? client.reference;
+    client.description = updateDto.description ?? client.description;
+    client.routerSerial = updateDto.routerSerial ?? client.routerSerial;
+    client.decoSerial = updateDto.decoSerial ?? client.decoSerial;
+
+    if ('advancePayment' in updateDto) {
+      client.advancePayment = convertToBoolean(updateDto.advancePayment);
+    }
+
+    if (updateDto.status) {
+      client.status = updateDto.status;
+    }
+
+    if (updateDto.installationDate) {
+      client.installationDate = new Date(`${updateDto.installationDate}T12:00:00Z`);
+    }
+    if (updateDto.paymentDate) {
+      client.paymentDate = new Date(`${updateDto.paymentDate}T12:00:00Z`);
+    }
+    if (updateDto.plan !== undefined) {
+      client.plan = updateDto.plan ? { id: updateDto.plan } as any : null;
+    }
+    if (updateDto.sector !== undefined) {
+      client.sector = updateDto.sector ? { id: updateDto.sector } as any : null;
+    }
+  }
+
+  /**
+   * Maneja la actualización de la imagen de referencia
+   * Método auxiliar para update()
+   */
+  private async handleReferenceImageUpdate(client: Client, newImagePath: string): Promise<void> {
+    if (client.referenceImage) {
+      const fullOldPath = join(process.cwd(), client.referenceImage);
+      try {
+        await fs.unlink(fullOldPath);
+        this.logger.log(`Imagen antigua eliminada: ${fullOldPath}`);
+      } catch (error) {
+        this.logger.warn(`Error al eliminar la imagen antigua ${fullOldPath}: ${error.message}`);
+      }
+    }
+    client.referenceImage = newImagePath;
+  }
+
+  /**
+   * Elimina un cliente y su imagen de referencia
+   */
   async remove(id: number) {
     const client = await this.clientRepository.findOne({ where: { id } });
     if (!client) {
@@ -331,6 +441,10 @@ export class ClientService {
     return await this.clientRepository.remove(client);
   }
 
+  /**
+   * Recalcula y guarda el estado de pago de un cliente
+   * Este método es crucial para mantener actualizado el estado de los clientes
+   */
   async recalculateAndSaveClientPaymentStatus(clienteId: number): Promise<ClientEntityPaymentStatus> {
     const client = await this.clientRepository.findOne({
       where: { id: clienteId },
@@ -342,49 +456,32 @@ export class ClientService {
       throw new NotFoundException(`Cliente ID ${clienteId} no encontrado para recalcular estado.`);
     }
 
-    const lastPayment = client.payments
-      ?.sort((a, b) => (b.paymentDate?.getTime() || 0) - (a.paymentDate?.getTime() || 0))
-      ?.[ 0 ];
+    const { status, description } = this.calculatePaymentStatus(
+      client.paymentDate,
+      client.advancePayment
+    );
 
-    const today = startOfDay(new Date());
-
-    let newPaymentStatus: ClientEntityPaymentStatus;
-    let shouldUpdateAccountStatus = false;
-
-    if (client.paymentDate) {
-      const paymentDateAtStartOfDay = startOfDay(new Date(client.paymentDate));
-      const daysUntilPayment = differenceInDays(paymentDateAtStartOfDay, today);
-      const isPaymentLate = lastPayment && lastPayment.state === PaymentStatus.LATE_PAYMENT;
-
-      if (daysUntilPayment < -30) {
-        newPaymentStatus = ClientEntityPaymentStatus.SUSPENDED;
-        shouldUpdateAccountStatus = true;
-      } else if (daysUntilPayment < 0 || isPaymentLate) {
-        newPaymentStatus = ClientEntityPaymentStatus.EXPIRED;
-      } else if (daysUntilPayment <= 7) {
-        newPaymentStatus = ClientEntityPaymentStatus.EXPIRING;
-      } else {
-        newPaymentStatus = ClientEntityPaymentStatus.PAID;
-      }
-    } else {
-      newPaymentStatus = ClientEntityPaymentStatus.EXPIRING;
-    }
-
-    if (client.paymentStatus !== newPaymentStatus || shouldUpdateAccountStatus) {
+    if (client.paymentStatus !== status) {
       const updates: Partial<Client> = {
-        paymentStatus: newPaymentStatus
+        paymentStatus: status
       };
-      if (shouldUpdateAccountStatus && client.status !== AccountStatus.SUSPENDED) {
+
+      // Si está suspendido, actualizar también el estado de cuenta
+      if (status === ClientEntityPaymentStatus.SUSPENDED && client.status !== AccountStatus.SUSPENDED) {
         updates.status = AccountStatus.SUSPENDED;
       }
-      if (Object.keys(updates).length > 0) {
-        await this.clientRepository.update(clienteId, updates);
-        this.logger.log(`Estado de cliente ID ${clienteId} actualizado: PaymentStatus=${newPaymentStatus}${updates.status ? ', AccountStatus=' + updates.status : ''}`);
-      }
+
+      await this.clientRepository.update(clienteId, updates);
+      this.logger.log(`Estado de cliente ID ${clienteId} actualizado: PaymentStatus=${status}${updates.status ? ', AccountStatus=' + updates.status : ''}`);
     }
-    return newPaymentStatus;
+
+    return status;
   }
 
+  /**
+   * Calcula el estado general de un cliente
+   * Este método proporciona una descripción más detallada del estado
+   */
   async getEstadoGeneralCliente(clienteId: number, clientEntity?: Client): Promise<string> {
     const client = clientEntity || await this.clientRepository.findOne({ where: { id: clienteId } });
 
@@ -392,52 +489,101 @@ export class ClientService {
       throw new NotFoundException(`Cliente con ID ${clienteId} no encontrado para getEstadoGeneralCliente.`);
     }
 
-    const hoy = startOfDay(new Date());
+    const { description } = this.calculatePaymentStatus(
+      client.paymentDate,
+      client.advancePayment
+    );
 
-    if (client.advancePayment && client.paymentDate) {
-      const proximoVencimientoAdelantado = startOfDay(new Date(client.paymentDate));
-      if (proximoVencimientoAdelantado >= hoy) {
-        const diffDaysAdelantado = differenceInDays(proximoVencimientoAdelantado, hoy);
-        if (diffDaysAdelantado > 7) return 'Al día';
-        if (diffDaysAdelantado >= 0) return 'Por vencer';
-      }
-    } else if (client.advancePayment && !client.paymentDate) {
-      return 'Al día';
-    }
-
-    if (!client.paymentDate) {
-      return 'Sin fecha de pago';
-    }
-
-    const proximoVencimiento = startOfDay(new Date(client.paymentDate));
-    const diffDays = differenceInDays(proximoVencimiento, hoy);
-
-    if (diffDays > 7) return 'Al día';
-    if (diffDays >= 0) return 'Por vencer';
-    if (diffDays < -30) return 'Suspendido';
-    return 'Vencido';
+    return description;
   }
 
+  /**
+   * Sincroniza los estados de pago de todos los clientes
+   * Este método debe ejecutarse una vez para actualizar los registros existentes
+   */
+  async syncAllClientsPaymentStatus(): Promise<void> {
+    this.logger.log('Iniciando sincronización de estados de pago de todos los clientes...');
+
+    try {
+      // Obtener todos los clientes
+      const clients = await this.clientRepository.find();
+      let updated = 0;
+      let unchanged = 0;
+      let errors = 0;
+
+      // Procesar cada cliente
+      for (const client of clients) {
+        try {
+          const { status, description } = this.calculatePaymentStatus(
+            client.paymentDate,
+            client.advancePayment
+          );
+
+          // Solo actualizar si el estado ha cambiado
+          if (client.paymentStatus !== status) {
+            const updates: Partial<Client> = {
+              paymentStatus: status
+            };
+
+            // Actualizar estado de cuenta si está suspendido
+            if (status === ClientEntityPaymentStatus.SUSPENDED &&
+              client.status !== AccountStatus.SUSPENDED) {
+              updates.status = AccountStatus.SUSPENDED;
+            }
+
+            await this.clientRepository.update(client.id, updates);
+            this.logger.log(
+              `Cliente ID ${client.id} actualizado: ${client.paymentStatus} -> ${status} (${description})`
+            );
+            updated++;
+          } else {
+            unchanged++;
+          }
+        } catch (error) {
+          this.logger.error(
+            `Error al actualizar cliente ID ${client.id}: ${error.message}`
+          );
+          errors++;
+        }
+      }
+
+      this.logger.log(`Sincronización completada:
+        - Total clientes: ${clients.length}
+        - Actualizados: ${updated}
+        - Sin cambios: ${unchanged}
+        - Errores: ${errors}`
+      );
+    } catch (error) {
+      this.logger.error('Error durante la sincronización:', error);
+      throw new Error('Error durante la sincronización de estados de pago');
+    }
+  }
+
+  /**
+   * Tarea programada para actualizar estados de clientes
+   * Se ejecuta todos los días a medianoche
+   */
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleCronActualizarEstadoClientes() {
-    this.logger.log('Ejecutando cron job para actualizar estado de clientes...');
-    const clients = await this.clientRepository.find({ select: [ 'id' ] });
-    for (const client of clients) {
-      try {
-        await this.recalculateAndSaveClientPaymentStatus(client.id);
-      } catch (error) {
-        this.logger.error(`Error al actualizar estado del cliente ID ${client.id} por cron: ${error.message}`, error.stack);
-      }
+    this.logger.log('Ejecutando actualización automática de estados de clientes...');
+    try {
+      await this.syncAllClientsPaymentStatus();
+      this.logger.log('Actualización automática completada exitosamente.');
+    } catch (error) {
+      this.logger.error('Error en la actualización automática:', error);
     }
-    this.logger.log('Cron job para actualizar estado de clientes finalizado.');
   }
 
+  /**
+   * Obtiene un resumen de los clientes según diferentes períodos
+   */
   async getSummary(getClientsSummaryDto: GetClientsSummaryDto) {
     const { period } = getClientsSummaryDto;
     let whereConditions: any = {};
 
     const today = startOfDay(new Date());
 
+    // Configuración de períodos
     if (period === 'today') {
       const tomorrow = new Date(today);
       tomorrow.setDate(today.getDate() + 1);
@@ -453,8 +599,6 @@ export class ClientService {
       const dayAfterToday = new Date(today);
       dayAfterToday.setDate(today.getDate() + 1);
       whereConditions.created_at = Between(sevenDaysAgo, dayAfterToday);
-    } else {
-      // Si no hay periodo específico, o es 'allTime', no aplicar filtro de fecha de creación
     }
 
     const totalSystemClients = await this.clientRepository.count();
@@ -464,6 +608,7 @@ export class ClientService {
       select: [ 'id', 'paymentDate', 'advancePayment' ]
     });
 
+    // Conteo de clientes por estado
     let clientesActivos = 0;
     let clientesVencidos = 0;
     let clientesPorVencer = 0;
@@ -499,6 +644,9 @@ export class ClientService {
     };
   }
 
+  /**
+   * Actualiza el estado de un cliente específico
+   */
   async updateClientStatus(clientId: number) {
     const client = await this.clientRepository.findOne({ where: { id: clientId } });
     if (!client) {
@@ -511,6 +659,9 @@ export class ClientService {
     return this.findOne(clientId);
   }
 
+  /**
+   * Guarda una nueva imagen de referencia para un cliente
+   */
   async saveImage(clientId: number, filename: string): Promise<Client> {
     const client = await this.clientRepository.findOne({ where: { id: clientId } });
     if (!client) {
@@ -530,6 +681,9 @@ export class ClientService {
     return this.clientRepository.save(client);
   }
 
+  /**
+   * Elimina la imagen de referencia de un cliente
+   */
   async deleteImage(clientId: number): Promise<void> {
     const client = await this.clientRepository.findOne({ where: { id: clientId } });
     if (!client || !client.referenceImage) {

@@ -11,6 +11,6 @@ if errorlevel 1 (
     goto CHECK_PORT
 )
 echo Puerto 3001 ocupado, iniciando npm run dev...
-cd /d "grupo_hemmy_frontend"
+cd /d "D:\group_hemmy\grupo_hemmy_frontend"
 start cmd /k npm run dev
 exit

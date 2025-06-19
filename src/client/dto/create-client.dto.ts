@@ -61,6 +61,10 @@ export class CreateClientDto {
     decoSerial?: string;
 
     @IsOptional()
+    @IsString()
+    ipAddress?: string;
+
+    @IsOptional()
     @IsEnum(PaymentStatus)
     paymentStatus?: PaymentStatus;
 }

@@ -64,6 +64,9 @@ export class Client {
     @Column({ nullable: true })
     decoSerial: string;
 
+    @Column({ nullable: true })
+    ipAddress: string;
+
     @Column({
         type: 'enum',
         enum: PaymentStatus,

@@ -164,6 +164,7 @@ export class ClientService {
         description: createClientDto.description,
         routerSerial: createClientDto.routerSerial,
         decoSerial: createClientDto.decoSerial,
+        ipAddress: createClientDto.ipAddress,
         plan: createClientDto.plan ? { id: createClientDto.plan } as any : null,
         sector: createClientDto.sector ? { id: createClientDto.sector } as any : null,
         installationDate: createClientDto.installationDate ? new Date(`${createClientDto.installationDate}T12:00:00Z`) : null,
@@ -248,7 +249,33 @@ export class ClientService {
     }
 
     if (status && status.length > 0) {
-      queryBuilder.andWhere('client.paymentStatus IN (:...status)', { status });
+      const statusConditions: string[] = [];
+      const parameters: any = {};
+
+      status.forEach((statusItem, index) => {
+        switch (statusItem) {
+          case 'active':
+            statusConditions.push(`client.status = :accountStatus${index}`);
+            parameters[ `accountStatus${index}` ] = AccountStatus.ACTIVE;
+            break;
+          case 'expired':
+            statusConditions.push(`client.paymentStatus = :paymentStatus${index}`);
+            parameters[ `paymentStatus${index}` ] = ClientEntityPaymentStatus.EXPIRED;
+            break;
+          case 'expiring':
+            statusConditions.push(`client.paymentStatus = :paymentStatus${index}`);
+            parameters[ `paymentStatus${index}` ] = ClientEntityPaymentStatus.EXPIRING;
+            break;
+          case 'suspended':
+            statusConditions.push(`client.paymentStatus = :paymentStatus${index}`);
+            parameters[ `paymentStatus${index}` ] = ClientEntityPaymentStatus.SUSPENDED;
+            break;
+        }
+      });
+
+      if (statusConditions.length > 0) {
+        queryBuilder.andWhere(`(${statusConditions.join(' OR ')})`, parameters);
+      }
     }
 
     if (services && services.length > 0) {
@@ -381,6 +408,7 @@ export class ClientService {
     client.description = updateDto.description ?? client.description;
     client.routerSerial = updateDto.routerSerial ?? client.routerSerial;
     client.decoSerial = updateDto.decoSerial ?? client.decoSerial;
+    client.ipAddress = updateDto.ipAddress ?? client.ipAddress;
 
     if ('advancePayment' in updateDto) {
       client.advancePayment = convertToBoolean(updateDto.advancePayment);
@@ -603,32 +631,35 @@ export class ClientService {
 
     const totalSystemClients = await this.clientRepository.count();
 
-    const clientsForPeriod = await this.clientRepository.find({
-      where: whereConditions,
-      select: [ 'id', 'paymentDate', 'advancePayment' ]
-    });
-
     // Conteo de clientes por estado
     let clientesActivos = 0;
     let clientesVencidos = 0;
     let clientesPorVencer = 0;
     let clientesSuspendidos = 0;
 
-    const allClientsForStatus = await this.clientRepository.find({ select: [ 'id', 'paymentDate', 'advancePayment' ] });
+    // Obtener todos los clientes con sus datos completos
+    const allClients = await this.clientRepository.find();
 
-    for (const client of allClientsForStatus) {
-      const estadoGeneral = await this.getEstadoGeneralCliente(client.id, client as Client);
-      switch (estadoGeneral) {
-        case 'Al día':
-          clientesActivos++;
-          break;
-        case 'Vencido':
+    for (const client of allClients) {
+      // Primero verificamos el estado de cuenta
+      if (client.status === AccountStatus.ACTIVE) {
+        clientesActivos++;
+      }
+
+      // Luego verificamos el estado de pago para las otras categorías
+      const { status, description } = this.calculatePaymentStatus(
+        client.paymentDate,
+        client.advancePayment
+      );
+
+      switch (status) {
+        case ClientEntityPaymentStatus.EXPIRED:
           clientesVencidos++;
           break;
-        case 'Por vencer':
+        case ClientEntityPaymentStatus.EXPIRING:
           clientesPorVencer++;
           break;
-        case 'Suspendido':
+        case ClientEntityPaymentStatus.SUSPENDED:
           clientesSuspendidos++;
           break;
       }

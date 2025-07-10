@@ -1,0 +1,260 @@
+[2025-07-08T15:47:01.564Z] 🚀 Iniciando proceso de migración completa...
+[2025-07-08T15:47:01.568Z] 🔍 Validando entorno...
+[2025-07-08T15:47:01.569Z] ✅ Encontradas 4 migraciones
+[2025-07-08T15:47:01.569Z] 📦 Creando backup de la base de datos...
+[2025-07-08T15:47:01.726Z] ✅ Backup creado: backup-2025-07-08T15-47-01-563Z.sql
+[2025-07-08T15:47:01.726Z] 📋 Ejecutando migraciones...
+[2025-07-08T15:47:01.727Z] 🔄 Ejecutando migraciones iniciales
+[2025-07-08T15:47:06.993Z] ❌ Ejecutando migraciones iniciales - Error: Command failed: npm run migration:run
+[96msrc/database/commands/migration.command.ts[0m:[93m1[0m:[93m19[0m - [91merror[0m[90m TS2305: [0mModule '"nestjs-command"' has no exported member 'CommandRunner'.
+
+[7m1[0m import { Command, CommandRunner } from 'nestjs-command';
+[7m [0m [91m                  ~~~~~~~~~~~~~[0m
+
+
+[2025-07-08T15:47:06.995Z] ❌ Error en el proceso de migración: Command failed: npm run migration:run
+[96msrc/database/commands/migration.command.ts[0m:[93m1[0m:[93m19[0m - [91merror[0m[90m TS2305: [0mModule '"nestjs-command"' has no exported member 'CommandRunner'.
+
+[7m1[0m import { Command, CommandRunner } from 'nestjs-command';
+[7m [0m [91m                  ~~~~~~~~~~~~~[0m
+
+
+[2025-07-08T15:47:06.996Z] 💡 Revisa el log para más detalles
+[2025-07-08T15:53:33.208Z] 🚀 Iniciando proceso de migración completa...
+[2025-07-08T15:53:33.212Z] 🔍 Validando entorno...
+[2025-07-08T15:53:33.213Z] ✅ Encontradas 4 migraciones
+[2025-07-08T15:53:33.214Z] 📦 Creando backup de la base de datos...
+[2025-07-08T15:53:33.375Z] ✅ Backup creado: backup-2025-07-08T15-53-33-207Z.sql
+[2025-07-08T15:53:33.375Z] 📋 Ejecutando migraciones...
+[2025-07-08T15:53:33.376Z] 🔄 Ejecutando migraciones iniciales
+[2025-07-08T15:53:44.743Z] ✅ Ejecutando migraciones iniciales - Exitoso
+[2025-07-08T15:53:44.743Z] 🔄 Validando migración de datos
+[2025-07-08T15:53:55.930Z] ❌ Validando migración de datos - Error: Command failed: npm run migration:validate
+[31m[Nest] 17108  - [39m08/07/2025, 10:53:55 a. m. [31m  ERROR[39m [38;5;3m[MigrationCommand] [39m[31m❌ Error en la validación:[39m
+Table 'group_hemmy.clients' doesn't exist
+cli migration:validate
+
+Validar que la migración de datos fue exitosa
+
+Options:
+  -h, --help     Show help                                             [boolean]
+  -v, --version  Show version number                                   [boolean]
+
+QueryFailedError: Table 'group_hemmy.clients' doesn't exist
+    at Query.onResult (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\typeorm\src\driver\mysql\MysqlQueryRunner.ts:246:33)
+    at Query.execute (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\commands\command.js:36:14)
+    at PoolConnection.handlePacket (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:475:34)
+    at PacketParser.onPacket (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:93:12)
+    at PacketParser.executeStart (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\packet_parser.js:75:16)
+    at Socket.<anonymous> (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:100:25)
+    at Socket.emit (node:events:519:28)
+    at Socket.emit (node:domain:488:12)
+    at addChunk (node:internal/streams/readable:559:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+    at Socket.Readable.push (node:internal/streams/readable:390:5)
+    at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+  query: 'SELECT COUNT(*) as count FROM clients',
+  parameters: undefined,
+  driverError: Error: Table 'group_hemmy.clients' doesn't exist
+      at Packet.asError (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\packets\packet.js:740:17)
+      at Query.execute (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\commands\command.js:29:26)
+      at PoolConnection.handlePacket (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:475:34)
+      at PacketParser.onPacket (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:93:12)
+      at PacketParser.executeStart (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\packet_parser.js:75:16)
+      at Socket.<anonymous> (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:100:25)
+      at Socket.emit (node:events:519:28)
+      at Socket.emit (node:domain:488:12)
+      at addChunk (node:internal/streams/readable:559:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+      at Socket.Readable.push (node:internal/streams/readable:390:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    code: 'ER_NO_SUCH_TABLE',
+    errno: 1146,
+    sqlState: '42S02',
+    sqlMessage: "Table 'group_hemmy.clients' doesn't exist",
+    sql: 'SELECT COUNT(*) as count FROM clients'
+  },
+  code: 'ER_NO_SUCH_TABLE',
+  errno: 1146,
+  sqlState: '42S02',
+  sqlMessage: "Table 'group_hemmy.clients' doesn't exist",
+  sql: 'SELECT COUNT(*) as count FROM clients'
+}
+
+[2025-07-08T15:53:55.932Z] ❌ Error en el proceso de migración: Command failed: npm run migration:validate
+[31m[Nest] 17108  - [39m08/07/2025, 10:53:55 a. m. [31m  ERROR[39m [38;5;3m[MigrationCommand] [39m[31m❌ Error en la validación:[39m
+Table 'group_hemmy.clients' doesn't exist
+cli migration:validate
+
+Validar que la migración de datos fue exitosa
+
+Options:
+  -h, --help     Show help                                             [boolean]
+  -v, --version  Show version number                                   [boolean]
+
+QueryFailedError: Table 'group_hemmy.clients' doesn't exist
+    at Query.onResult (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\typeorm\src\driver\mysql\MysqlQueryRunner.ts:246:33)
+    at Query.execute (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\commands\command.js:36:14)
+    at PoolConnection.handlePacket (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:475:34)
+    at PacketParser.onPacket (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:93:12)
+    at PacketParser.executeStart (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\packet_parser.js:75:16)
+    at Socket.<anonymous> (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:100:25)
+    at Socket.emit (node:events:519:28)
+    at Socket.emit (node:domain:488:12)
+    at addChunk (node:internal/streams/readable:559:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+    at Socket.Readable.push (node:internal/streams/readable:390:5)
+    at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+  query: 'SELECT COUNT(*) as count FROM clients',
+  parameters: undefined,
+  driverError: Error: Table 'group_hemmy.clients' doesn't exist
+      at Packet.asError (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\packets\packet.js:740:17)
+      at Query.execute (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\commands\command.js:29:26)
+      at PoolConnection.handlePacket (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:475:34)
+      at PacketParser.onPacket (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:93:12)
+      at PacketParser.executeStart (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\packet_parser.js:75:16)
+      at Socket.<anonymous> (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:100:25)
+      at Socket.emit (node:events:519:28)
+      at Socket.emit (node:domain:488:12)
+      at addChunk (node:internal/streams/readable:559:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+      at Socket.Readable.push (node:internal/streams/readable:390:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    code: 'ER_NO_SUCH_TABLE',
+    errno: 1146,
+    sqlState: '42S02',
+    sqlMessage: "Table 'group_hemmy.clients' doesn't exist",
+    sql: 'SELECT COUNT(*) as count FROM clients'
+  },
+  code: 'ER_NO_SUCH_TABLE',
+  errno: 1146,
+  sqlState: '42S02',
+  sqlMessage: "Table 'group_hemmy.clients' doesn't exist",
+  sql: 'SELECT COUNT(*) as count FROM clients'
+}
+
+[2025-07-08T15:53:55.932Z] 💡 Revisa el log para más detalles
+[2025-07-08T16:01:20.139Z] 🚀 Iniciando proceso de migración completa...
+[2025-07-08T16:01:20.143Z] 🔍 Validando entorno...
+[2025-07-08T16:01:20.143Z] ✅ Encontradas 4 migraciones
+[2025-07-08T16:01:20.144Z] 📦 Creando backup de la base de datos...
+[2025-07-08T16:01:20.286Z] ✅ Backup creado: backup-2025-07-08T16-01-20-138Z.sql
+[2025-07-08T16:01:20.287Z] 📋 Ejecutando migraciones...
+[2025-07-08T16:01:20.287Z] 🔄 Ejecutando migraciones iniciales
+[2025-07-08T16:01:31.349Z] ✅ Ejecutando migraciones iniciales - Exitoso
+[2025-07-08T16:01:31.350Z] 🔄 Validando migración de datos
+[2025-07-08T16:01:42.512Z] ❌ Validando migración de datos - Error: Command failed: npm run migration:validate
+[31m[Nest] 16480  - [39m08/07/2025, 11:01:42 a. m. [31m  ERROR[39m [38;5;3m[MigrationCommand] [39m[31m❌ Error en la validación:[39m
+Table 'group_hemmy.clients' doesn't exist
+cli migration:validate
+
+Validar que la migración de datos fue exitosa
+
+Options:
+  -h, --help     Show help                                             [boolean]
+  -v, --version  Show version number                                   [boolean]
+
+QueryFailedError: Table 'group_hemmy.clients' doesn't exist
+    at Query.onResult (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\typeorm\src\driver\mysql\MysqlQueryRunner.ts:246:33)
+    at Query.execute (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\commands\command.js:36:14)
+    at PoolConnection.handlePacket (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:475:34)
+    at PacketParser.onPacket (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:93:12)
+    at PacketParser.executeStart (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\packet_parser.js:75:16)
+    at Socket.<anonymous> (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:100:25)
+    at Socket.emit (node:events:519:28)
+    at Socket.emit (node:domain:488:12)
+    at addChunk (node:internal/streams/readable:559:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+    at Socket.Readable.push (node:internal/streams/readable:390:5)
+    at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+  query: 'SELECT COUNT(*) as count FROM clients',
+  parameters: undefined,
+  driverError: Error: Table 'group_hemmy.clients' doesn't exist
+      at Packet.asError (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\packets\packet.js:740:17)
+      at Query.execute (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\commands\command.js:29:26)
+      at PoolConnection.handlePacket (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:475:34)
+      at PacketParser.onPacket (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:93:12)
+      at PacketParser.executeStart (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\packet_parser.js:75:16)
+      at Socket.<anonymous> (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:100:25)
+      at Socket.emit (node:events:519:28)
+      at Socket.emit (node:domain:488:12)
+      at addChunk (node:internal/streams/readable:559:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+      at Socket.Readable.push (node:internal/streams/readable:390:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    code: 'ER_NO_SUCH_TABLE',
+    errno: 1146,
+    sqlState: '42S02',
+    sqlMessage: "Table 'group_hemmy.clients' doesn't exist",
+    sql: 'SELECT COUNT(*) as count FROM clients'
+  },
+  code: 'ER_NO_SUCH_TABLE',
+  errno: 1146,
+  sqlState: '42S02',
+  sqlMessage: "Table 'group_hemmy.clients' doesn't exist",
+  sql: 'SELECT COUNT(*) as count FROM clients'
+}
+
+[2025-07-08T16:01:42.513Z] ❌ Error en el proceso de migración: Command failed: npm run migration:validate
+[31m[Nest] 16480  - [39m08/07/2025, 11:01:42 a. m. [31m  ERROR[39m [38;5;3m[MigrationCommand] [39m[31m❌ Error en la validación:[39m
+Table 'group_hemmy.clients' doesn't exist
+cli migration:validate
+
+Validar que la migración de datos fue exitosa
+
+Options:
+  -h, --help     Show help                                             [boolean]
+  -v, --version  Show version number                                   [boolean]
+
+QueryFailedError: Table 'group_hemmy.clients' doesn't exist
+    at Query.onResult (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\typeorm\src\driver\mysql\MysqlQueryRunner.ts:246:33)
+    at Query.execute (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\commands\command.js:36:14)
+    at PoolConnection.handlePacket (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:475:34)
+    at PacketParser.onPacket (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:93:12)
+    at PacketParser.executeStart (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\packet_parser.js:75:16)
+    at Socket.<anonymous> (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:100:25)
+    at Socket.emit (node:events:519:28)
+    at Socket.emit (node:domain:488:12)
+    at addChunk (node:internal/streams/readable:559:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+    at Socket.Readable.push (node:internal/streams/readable:390:5)
+    at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+  query: 'SELECT COUNT(*) as count FROM clients',
+  parameters: undefined,
+  driverError: Error: Table 'group_hemmy.clients' doesn't exist
+      at Packet.asError (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\packets\packet.js:740:17)
+      at Query.execute (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\commands\command.js:29:26)
+      at PoolConnection.handlePacket (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:475:34)
+      at PacketParser.onPacket (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:93:12)
+      at PacketParser.executeStart (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\packet_parser.js:75:16)
+      at Socket.<anonymous> (D:\Empresas_dev\Hemmy\grupo_hemmy\grupo_hemmy_backend\node_modules\mysql2\lib\base\connection.js:100:25)
+      at Socket.emit (node:events:519:28)
+      at Socket.emit (node:domain:488:12)
+      at addChunk (node:internal/streams/readable:559:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+      at Socket.Readable.push (node:internal/streams/readable:390:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    code: 'ER_NO_SUCH_TABLE',
+    errno: 1146,
+    sqlState: '42S02',
+    sqlMessage: "Table 'group_hemmy.clients' doesn't exist",
+    sql: 'SELECT COUNT(*) as count FROM clients'
+  },
+  code: 'ER_NO_SUCH_TABLE',
+  errno: 1146,
+  sqlState: '42S02',
+  sqlMessage: "Table 'group_hemmy.clients' doesn't exist",
+  sql: 'SELECT COUNT(*) as count FROM clients'
+}
+
+[2025-07-08T16:01:42.513Z] 💡 Revisa el log para más detalles
+[2025-07-08T17:01:12.577Z] 📊 Estado de la migración:
+[2025-07-08T17:01:12.581Z] 📦 Backups disponibles: 3
+[2025-07-08T17:01:12.598Z]   - backup-2025-07-08T15-47-01-563Z.sql (8/7/2025, 10:47:01 a. m.)
+[2025-07-08T17:01:12.599Z]   - backup-2025-07-08T15-53-33-207Z.sql (8/7/2025, 10:53:33 a. m.)
+[2025-07-08T17:01:12.599Z]   - backup-2025-07-08T16-01-20-138Z.sql (8/7/2025, 11:01:20 a. m.)
+[2025-07-08T17:01:12.599Z] 📜 Scripts disponibles: 4
+[2025-07-08T17:01:12.600Z]   - cleanup-old-tables.js
+[2025-07-08T17:01:12.600Z]   - migracion-completa.js
+[2025-07-08T17:01:12.600Z]   - migrate-data.js
+[2025-07-08T17:01:12.601Z]   - run-migrations.js

@@ -7,8 +7,8 @@ describe('ServicesController', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [ServicesController],
-      providers: [ServicesService],
+      controllers: [ ServicesController ],
+      providers: [ ServicesService ],
     }).compile();
 
     controller = module.get<ServicesController>(ServicesController);
@@ -18,4 +18,3 @@ describe('ServicesController', () => {
     expect(controller).toBeDefined();
   });
 });
-a

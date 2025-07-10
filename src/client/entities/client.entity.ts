@@ -2,7 +2,8 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, Up
 import { Sector } from 'src/sectors/entities/sector.entity';
 import { Plan } from 'src/plans/entities/plan.entity';
 import { Payment } from 'src/payments/entities/payment.entity';
-
+import { Installation } from 'src/installations/entities/installation.entity';
+import { Device } from 'src/devices/entities/device.entity';
 
 export enum AccountStatus {
     ACTIVE = 'ACTIVE',
@@ -10,68 +11,31 @@ export enum AccountStatus {
     INACTIVE = 'INACTIVE'
 }
 
-export enum PaymentStatus {
-    SUSPENDED = 'SUSPENDED',
-    EXPIRING = 'EXPIRING',
-    EXPIRED = 'EXPIRED',
-    PAID = 'PAID'
-}
-
-@Entity()
+@Entity('clients')
 export class Client {
     @PrimaryGeneratedColumn()
     id: number;
 
-    @Column()
+    @Column({ nullable: true })
     name: string;
 
-    @Column()
+    @Column({ nullable: true })
     lastName: string;
 
-    @Column({ unique: true })
+    @Column({ unique: true }) //dni is unique
     dni: string;
 
-    @Column()
+    @Column({ nullable: true })
     phone: string;
 
-    @Column()
+    @Column({ nullable: true })
     address: string;
-
-    @Column({ nullable: true })
-    installationDate: Date;
-
-    @Column({ nullable: true })
-    reference: string;
-
-    @Column({ nullable: true })
-    referenceImage: string;
-
-    @Column({ nullable: true })
-    initialPaymentDate: Date;
-
-    @Column({ nullable: true })
-    paymentDate: Date;
-
-    @Column({ nullable: true })
-    advancePayment: boolean;
 
     @Column({ nullable: true })
     description: string;
 
     @Column({ nullable: true })
-    routerSerial: string;
-
-    @Column({ nullable: true })
-    decoSerial: string;
-
-    @Column({ nullable: true })
-    ipAddress: string;
-
-    @Column({
-        type: 'enum',
-        enum: PaymentStatus,
-    })
-    paymentStatus: PaymentStatus;
+    birthdate: Date;
 
     @Column({
         type: 'enum',
@@ -83,13 +47,11 @@ export class Client {
     @OneToMany(() => Payment, (payment) => payment.client)
     payments: Payment[];
 
-    @ManyToOne(() => Plan, { eager: true, nullable: true, onDelete: 'SET NULL', onUpdate: 'CASCADE' })
-    @JoinColumn({ name: 'planId' })
-    plan: Plan;
+    @OneToMany(() => Installation, (installation) => installation.client)
+    installations: Installation[];
 
-    @ManyToOne(() => Sector, { eager: true, nullable: true, onDelete: 'SET NULL', onUpdate: 'CASCADE' })
-    @JoinColumn({ name: 'sectorId' })
-    sector: Sector;
+    @OneToMany(() => Device, (device) => device.client)
+    devices: Device[];
 
     @CreateDateColumn({ type: "timestamp", default: () => "CURRENT_TIMESTAMP(6)" })
     public created_at: Date;

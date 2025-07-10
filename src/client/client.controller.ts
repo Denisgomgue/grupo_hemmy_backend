@@ -49,29 +49,13 @@ export class ClientController {
   }))
   async create(@Body() createClientDto: CreateClientDto, @UploadedFile() file?: Express.Multer.File) {
     try {
-      // Validar formato del DNI (8 dígitos)
-      if (!/^\d{8}$/.test(createClientDto.dni)) {
-        throw new BadRequestException('El DNI debe contener exactamente 8 dígitos');
-      }
-
-      // Procesar la imagen si existe
-      if (file) {
-        console.log('Archivo recibido:', {
-          originalname: file.originalname,
-          filename: file.filename,
-          path: `${this.uploadDir}/${file.filename}`
-        });
-        createClientDto.referenceImage = `${this.uploadDir}/${file.filename}`;
-      }
-
       // Crear el cliente dentro de una transacción
       // La validación del DNI se realiza dentro de createWithTransaction
       const result = await this.clientService.createWithTransaction(createClientDto);
 
       console.log('Cliente creado:', {
         id: result.id,
-        dni: result.dni,
-        referenceImage: result.referenceImage
+        dni: result.dni
       });
 
       return result;
@@ -89,26 +73,10 @@ export class ClientController {
   }
 
   @Patch(':id')
-  @UseInterceptors(FileInterceptor('referenceImage', {
-    storage,
-    fileFilter: (req, file, cb) => {
-      if (!file.mimetype.match(/\/(jpg|jpeg|png|gif)$/)) {
-        return cb(null, false);
-      }
-      cb(null, true);
-    },
-    limits: {
-      fileSize: 2 * 1024 * 1024 // 2MB
-    }
-  }))
   async update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateClientDto: UpdateClientDto,
-    @UploadedFile() file?: Express.Multer.File
+    @Body() updateClientDto: UpdateClientDto
   ) {
-    if (file) {
-      updateClientDto.referenceImage = `${this.uploadDir}/${file.filename}`;
-    }
     return this.clientService.update(id, updateClientDto);
   }
 
@@ -175,8 +143,8 @@ export class ClientController {
         results.push({
           id: client.id,
           name: client.name,
-          oldStatus: client.paymentStatus,
-          newStatus: updatedClient.paymentStatus
+          oldStatus: client.status,
+          newStatus: updatedClient.status
         });
       } catch (error) {
         results.push({
@@ -198,33 +166,30 @@ export class ClientController {
     try {
       // Validar formato del DNI
       if (!/^\d{8}$/.test(dni)) {
-        throw new BadRequestException('El DNI debe contener exactamente 8 dígitos');
+        return {
+          valid: false,
+          message: 'El DNI debe contener exactamente 8 dígitos'
+        };
       }
 
+      // Verificar si el DNI ya existe
       const exists = await this.clientService.checkDniExists(dni);
-      console.log(`Validación DNI ${dni}:`, { exists });
-
       return {
-        exists,
-        status: HttpStatus.OK,
-        message: exists ? 'DNI ya registrado' : 'DNI disponible'
+        valid: !exists,
+        message: exists ? 'El DNI ya está registrado' : 'DNI disponible'
       };
     } catch (error) {
-      console.error(`Error al validar DNI ${dni}:`, error);
-      throw error;
+      return {
+        valid: false,
+        message: 'Error al validar el DNI'
+      };
     }
   }
 
+  @Public()
   @Post('sync-states')
   async syncStates() {
-    try {
-      const result = await this.clientService.syncAllClientsPaymentStatus();
-      return {
-        message: 'Estados de clientes sincronizados correctamente',
-        status: 'success'
-      };
-    } catch (error) {
-      throw new BadRequestException('Error al sincronizar los estados de los clientes');
-    }
+    await this.clientService.syncAllClientsPaymentStatus();
+    return { message: 'Estados sincronizados correctamente' };
   }
 }

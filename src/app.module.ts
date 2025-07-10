@@ -5,10 +5,21 @@ import { User } from "./user/entities/user.entity";
 import { Sector } from "./sectors/entities/sector.entity";
 import { Plan } from "./plans/entities/plan.entity";
 import { Client } from "./client/entities/client.entity";
+import { Installation } from "./installations/entities/installation.entity";
+import { Device } from "./devices/entities/device.entity";
+import { Employee } from "./employees/entities/employee.entity";
+import { ClientPaymentConfig } from "./client-payment-config/entities/client-payment-config.entity";
+import { Payment } from "./payments/entities/payment.entity";
+import { PaymentHistory } from "./payment-histories/entities/payment-history.entity";
 import { UserModule } from "./user/user.module";
 import { ClientModule } from "./client/client.module";
 import { PlansModule } from "./plans/plans.module";
 import { SectorsModule } from "./sectors/sectors.module";
+import { InstallationsModule } from "./installations/installations.module";
+import { DevicesModule } from "./devices/devices.module";
+import { EmployeesModule } from "./employees/employees.module";
+import { ClientPaymentConfigModule } from "./client-payment-config/client-payment-config.module";
+import { PaymentHistoriesModule } from "./payment-histories/payment-histories.module";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { APP_GUARD } from "@nestjs/core";
@@ -24,10 +35,7 @@ import { RoleHasPermissionsModule } from "./role-has-permissions/role-has-permis
 import { RoleModule } from "./role/role.module";
 import { PermissionModule } from "./permission/permission.module";
 import { PaymentsModule } from "./payments/payments.module";
-import { Payment } from "./payments/entities/payment.entity";
-import { PaymentHistory } from "./payment-history/entities/payment-history.entity";
 import { UploadModule } from './upload/upload.module';
-
 
 @Module({
   imports: [
@@ -49,9 +57,13 @@ import { UploadModule } from './upload/upload.module';
         Permission,
         RoleHasPermission,
         Payment,
-        PaymentHistory
+        PaymentHistory,
+        Installation,
+        Device,
+        Employee,
+        ClientPaymentConfig
       ],
-      synchronize: true,
+      synchronize: true, // Habilitado para desarrollo
       //migrationsRun: true,
       //logging: true,
       timezone: 'Z',
@@ -61,6 +73,11 @@ import { UploadModule } from './upload/upload.module';
     PlansModule,
     SectorsModule,
     ServicesModule,
+    InstallationsModule,
+    DevicesModule,
+    EmployeesModule,
+    ClientPaymentConfigModule,
+    PaymentHistoriesModule,
     AuthModule,
     DatabaseSeederModule,
     RoleHasPermissionsModule,

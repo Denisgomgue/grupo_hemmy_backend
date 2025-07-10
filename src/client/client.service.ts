@@ -1,18 +1,21 @@
 /**
- * Servicio para la gestión de clientes
+ * Servicio para la gestión de clientes - Versión actualizada para nueva estructura
  * Este servicio maneja todas las operaciones relacionadas con los clientes:
  * - CRUD de clientes
- * - Gestión de estados de pago
- * - Gestión de imágenes de referencia
- * - Cálculos automáticos de estados
+ * - Gestión de estados de pago a través de installations
+ * - Gestión de instalaciones
+ * - Gestión de configuraciones de pago
  */
 import { Injectable, NotFoundException, Logger, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, Not, Between } from 'typeorm';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
-import { Client, AccountStatus, PaymentStatus as ClientEntityPaymentStatus } from './entities/client.entity';
+import { Client, AccountStatus } from './entities/client.entity';
 import { Payment, PaymentStatus } from '../payments/entities/payment.entity';
+import { Installation } from '../installations/entities/installation.entity';
+import { ClientPaymentConfig, PaymentStatus as ClientPaymentStatus } from '../client-payment-config/entities/client-payment-config.entity';
+import { Device } from '../devices/entities/device.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { addMonths, differenceInDays, startOfDay } from 'date-fns';
 import { GetClientsSummaryDto } from './dto/get-clients-summary.dto';
@@ -41,6 +44,12 @@ export class ClientService {
     private readonly clientRepository: Repository<Client>,
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
+    @InjectRepository(Installation)
+    private readonly installationRepository: Repository<Installation>,
+    @InjectRepository(ClientPaymentConfig)
+    private readonly clientPaymentConfigRepository: Repository<ClientPaymentConfig>,
+    @InjectRepository(Device)
+    private readonly deviceRepository: Repository<Device>,
     private readonly dataSource: DataSource
   ) { }
 
@@ -80,13 +89,13 @@ export class ClientService {
   private calculatePaymentStatus(
     paymentDate: Date | null,
     isAdvancePayment: boolean
-  ): { status: ClientEntityPaymentStatus; description: string } {
+  ): { status: ClientPaymentStatus; description: string } {
     const today = startOfDay(new Date());
 
     // Si no hay fecha de pago
     if (!paymentDate) {
       return {
-        status: ClientEntityPaymentStatus.EXPIRING,
+        status: ClientPaymentStatus.EXPIRING,
         description: 'Sin fecha de pago'
       };
     }
@@ -98,13 +107,13 @@ export class ClientService {
     if (isAdvancePayment) {
       if (daysUntilPayment > 7) {
         return {
-          status: ClientEntityPaymentStatus.PAID,
+          status: ClientPaymentStatus.PAID,
           description: 'Pagado'
         };
       }
       if (daysUntilPayment >= 0) {
         return {
-          status: ClientEntityPaymentStatus.EXPIRING,
+          status: ClientPaymentStatus.EXPIRING,
           description: 'Por vencer'
         };
       }
@@ -113,31 +122,31 @@ export class ClientService {
     // Lógica para pago normal
     if (daysUntilPayment > 7) {
       return {
-        status: ClientEntityPaymentStatus.PAID,
+        status: ClientPaymentStatus.PAID,
         description: 'Pagado'
       };
     }
     if (daysUntilPayment >= 0) {
       return {
-        status: ClientEntityPaymentStatus.EXPIRING,
+        status: ClientPaymentStatus.EXPIRING,
         description: 'Por vencer'
       };
     }
     if (daysUntilPayment >= -7) {
       return {
-        status: ClientEntityPaymentStatus.EXPIRED,
+        status: ClientPaymentStatus.EXPIRED,
         description: 'Vencido'
       };
     }
     return {
-      status: ClientEntityPaymentStatus.SUSPENDED,
+      status: ClientPaymentStatus.SUSPENDED,
       description: 'Suspendido'
     };
   }
 
   /**
    * Crea un nuevo cliente con manejo de transacciones
-   * Incluye validación de DNI y cálculo inicial de estado de pago
+   * Incluye validación de DNI
    */
   async createWithTransaction(createClientDto: CreateClientDto): Promise<Client> {
     const queryRunner = this.dataSource.createQueryRunner();
@@ -158,39 +167,14 @@ export class ClientService {
         dni: createClientDto.dni,
         phone: createClientDto.phone,
         address: createClientDto.address,
-        reference: createClientDto.reference,
-        advancePayment: createClientDto.advancePayment ?? false,
         status: createClientDto.status || AccountStatus.ACTIVE,
         description: createClientDto.description,
-        routerSerial: createClientDto.routerSerial,
-        decoSerial: createClientDto.decoSerial,
-        ipAddress: createClientDto.ipAddress,
-        plan: createClientDto.plan ? { id: createClientDto.plan } as any : null,
-        sector: createClientDto.sector ? { id: createClientDto.sector } as any : null,
-        installationDate: createClientDto.installationDate ? new Date(`${createClientDto.installationDate}T12:00:00Z`) : null,
-        referenceImage: createClientDto.referenceImage
       };
 
-      // Cálculo del estado de pago inicial
-      if (createClientDto.paymentDate) {
-        const paymentDate = new Date(`${createClientDto.paymentDate}T12:00:00Z`);
-        clientData.paymentDate = paymentDate;
-        clientData.initialPaymentDate = paymentDate;
-
-        const { status, description } = this.calculatePaymentStatus(
-          paymentDate,
-          createClientDto.advancePayment
-        );
-
-        clientData.paymentStatus = status;
-        this.logger.log(`Cliente DNI ${createClientDto.dni} - ${description}. Estado: ${status}`);
-      } else {
-        clientData.paymentStatus = ClientEntityPaymentStatus.EXPIRING;
-        this.logger.warn(`Cliente DNI ${createClientDto.dni} sin fecha de próximo pago. Estado: EXPIRING`);
-      }
-
+      // Crear el cliente
       const client = queryRunner.manager.create(Client, clientData);
       const savedClient = await queryRunner.manager.save(Client, client);
+
       await queryRunner.commitTransaction();
       this.logger.log(`Cliente creado ID ${savedClient.id}, DNI: ${savedClient.dni}`);
       return savedClient;
@@ -198,26 +182,15 @@ export class ClientService {
       if (queryRunner.isTransactionActive) {
         await queryRunner.rollbackTransaction();
       }
-      this.logger.error(`Error en createWithTransaction (DNI: ${createClientDto.dni}):`, error);
-      if (error instanceof ConflictException || error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new ConflictException('Error al crear el cliente debido a un conflicto de datos o error interno.');
+      this.logger.error(`Error en createWithTransaction:`, error);
+      throw error;
     } finally {
       await queryRunner.release();
     }
   }
 
   /**
-   * Busca clientes con filtros y paginación
-   * @param page - Número de página
-   * @param limit - Límite de resultados por página
-   * @param search - Término de búsqueda
-   * @param status - Filtro por estado
-   * @param services - Filtro por servicios
-   * @param minCost - Costo mínimo
-   * @param maxCost - Costo máximo
-   * @param sectors - Filtro por sectores
+   * Busca todos los clientes con paginación y filtros
    */
   async findAll(
     page: number = 1,
@@ -229,509 +202,365 @@ export class ClientService {
     maxCost?: number,
     sectors?: string[]
   ): Promise<{ data: Client[], total: number }> {
-    const skip = (page - 1) * limit;
-
     const queryBuilder = this.clientRepository
       .createQueryBuilder('client')
-      .leftJoinAndSelect('client.plan', 'plan')
-      .leftJoinAndSelect('plan.service', 'service')
-      .leftJoinAndSelect('client.sector', 'sector')
-      .orderBy('client.created_at', 'DESC');
+      .leftJoinAndSelect('client.installations', 'installations')
+      .leftJoinAndSelect('installations.plan', 'plan')
+      .leftJoinAndSelect('installations.sector', 'sector')
+      .leftJoinAndSelect('installations.paymentConfig', 'paymentConfig')
+      .leftJoinAndSelect('client.devices', 'devices');
 
-    // Aplicar filtros de búsqueda
+    // Aplicar filtros
     if (search) {
       queryBuilder.andWhere(
-        '(LOWER(client.name) LIKE LOWER(:search) OR ' +
-        'LOWER(client.lastName) LIKE LOWER(:search) OR ' +
-        'client.dni LIKE :search)',
+        '(client.name LIKE :search OR client.lastName LIKE :search OR client.dni LIKE :search OR client.phone LIKE :search)',
         { search: `%${search}%` }
       );
     }
 
     if (status && status.length > 0) {
-      const statusConditions: string[] = [];
-      const parameters: any = {};
-
-      status.forEach((statusItem, index) => {
-        switch (statusItem) {
-          case 'active':
-            statusConditions.push(`client.status = :accountStatus${index}`);
-            parameters[ `accountStatus${index}` ] = AccountStatus.ACTIVE;
-            break;
-          case 'expired':
-            statusConditions.push(`client.paymentStatus = :paymentStatus${index}`);
-            parameters[ `paymentStatus${index}` ] = ClientEntityPaymentStatus.EXPIRED;
-            break;
-          case 'expiring':
-            statusConditions.push(`client.paymentStatus = :paymentStatus${index}`);
-            parameters[ `paymentStatus${index}` ] = ClientEntityPaymentStatus.EXPIRING;
-            break;
-          case 'suspended':
-            statusConditions.push(`client.paymentStatus = :paymentStatus${index}`);
-            parameters[ `paymentStatus${index}` ] = ClientEntityPaymentStatus.SUSPENDED;
-            break;
-        }
-      });
-
-      if (statusConditions.length > 0) {
-        queryBuilder.andWhere(`(${statusConditions.join(' OR ')})`, parameters);
-      }
-    }
-
-    if (services && services.length > 0) {
-      queryBuilder.andWhere('service.id IN (:...services)', {
-        services: services.map(id => parseInt(id, 10))
-      });
-    }
-
-    if (minCost !== undefined && maxCost !== undefined) {
-      queryBuilder.andWhere('plan.price BETWEEN :minCost AND :maxCost', {
-        minCost,
-        maxCost
-      });
+      queryBuilder.andWhere('client.status IN (:...status)', { status });
     }
 
     if (sectors && sectors.length > 0) {
-      queryBuilder.andWhere('sector.id IN (:...sectors)', {
-        sectors: sectors.map(id => parseInt(id, 10))
-      });
+      queryBuilder.andWhere('sector.id IN (:...sectors)', { sectors });
     }
 
-    const [ clients, total ] = await queryBuilder
-      .skip(skip)
-      .take(limit)
-      .getManyAndCount();
+    // Paginación
+    const offset = (page - 1) * limit;
+    queryBuilder.skip(offset).take(limit);
 
-    return {
-      data: clients,
-      total
-    };
+    // Ordenamiento
+    queryBuilder.orderBy('client.created_at', 'DESC');
+
+    const [ data, total ] = await queryBuilder.getManyAndCount();
+
+    return { data, total };
   }
 
   /**
-   * Busca un cliente por ID y calcula su estado general
-   * @param id - ID del cliente
+   * Busca un cliente por ID
    */
   async findOne(id: number) {
-    const client = await this.clientRepository
-      .createQueryBuilder('client')
-      .leftJoinAndSelect('client.plan', 'plan')
-      .leftJoinAndSelect('plan.service', 'service')
-      .leftJoinAndSelect('client.sector', 'sector')
-      .where('client.id = :id', { id })
-      .getOne();
+    const client = await this.clientRepository.findOne({
+      where: { id },
+      relations: [ 'installations', 'installations.plan', 'installations.sector', 'installations.paymentConfig', 'devices', 'payments' ],
+    });
 
     if (!client) {
-      throw new NotFoundException(`Client with ID ${id} not found`);
+      throw new NotFoundException(`Cliente con ID ${id} no encontrado`);
     }
 
-    const estadoGeneralCalculado = await this.getEstadoGeneralCliente(id, client);
-    this.logger.debug(`Cliente ID: ${id}, paymentStatus calculado dinámicamente para findOne: ${estadoGeneralCalculado}`);
-
-    return { ...client, paymentStatusString: estadoGeneralCalculado };
+    return client;
   }
 
   /**
-   * Actualiza un cliente existente
-   * Incluye manejo de transacciones y actualización de imágenes
+   * Actualiza un cliente
    */
   async update(id: number, updateClientDto: UpdateClientDto): Promise<Client> {
+    const client = await this.findOne(id);
+    if (!client) {
+      throw new NotFoundException(`Cliente con ID ${id} no encontrado`);
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
-    await queryRunner.startTransaction('SERIALIZABLE');
+    await queryRunner.startTransaction();
 
     try {
-      const clientToUpdate = await queryRunner.manager.findOne(Client, { where: { id } });
-      if (!clientToUpdate) {
-        throw new NotFoundException(`Client with ID ${id} not found`);
-      }
+      // Actualizar campos básicos del cliente
+      this.updateBasicFields(client, updateClientDto);
 
-      // Validación de DNI único
-      if (updateClientDto.dni && updateClientDto.dni !== clientToUpdate.dni) {
-        const dniExistsInOtherClient = await queryRunner.manager.exists(Client, {
-          where: {
-            dni: updateClientDto.dni,
-            id: Not(id)
-          }
-        });
-        if (dniExistsInOtherClient) {
-          throw new ConflictException(`El DNI ${updateClientDto.dni} ya está registrado para otro cliente.`);
-        }
-        clientToUpdate.dni = updateClientDto.dni;
-      }
+      // Guardar cliente actualizado
+      const updatedClient = await queryRunner.manager.save(Client, client);
 
-      // Actualización de campos básicos
-      this.updateBasicFields(clientToUpdate, updateClientDto);
-
-      // Manejo de imagen de referencia
-      if (updateClientDto.referenceImage !== clientToUpdate.referenceImage) {
-        await this.handleReferenceImageUpdate(clientToUpdate, updateClientDto.referenceImage);
-      }
-
-      const savedClient = await queryRunner.manager.save(Client, clientToUpdate);
       await queryRunner.commitTransaction();
-      this.logger.log(`Cliente ID ${id} actualizado. DNI: ${savedClient.dni}`);
-
-      // Recálculo de estado
-      try {
-        await this.recalculateAndSaveClientPaymentStatus(id);
-        this.logger.log(`Estado del cliente ID ${id} recalculado post-actualización.`);
-      } catch (recalcError) {
-        this.logger.error(`Error al recalcular estado para cliente ID ${id} post-actualización:`, recalcError);
-      }
-
-      return this.findOne(id);
+      return updatedClient;
     } catch (error) {
       if (queryRunner.isTransactionActive) {
         await queryRunner.rollbackTransaction();
       }
-      this.logger.error(`Error en update (ID: ${id}):`, error);
-      if (error instanceof ConflictException || error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new ConflictException('Error al actualizar el cliente debido a un conflicto de datos o error interno.');
+      this.logger.error(`Error en update:`, error);
+      throw error;
     } finally {
       await queryRunner.release();
     }
   }
 
   /**
-   * Actualiza los campos básicos de un cliente
-   * Método auxiliar para update()
+   * Actualiza los campos básicos del cliente
    */
   private updateBasicFields(client: Client, updateDto: UpdateClientDto): void {
-    client.name = updateDto.name ?? client.name;
-    client.lastName = updateDto.lastName ?? client.lastName;
-    client.phone = updateDto.phone ?? client.phone;
-    client.address = updateDto.address ?? client.address;
-    client.reference = updateDto.reference ?? client.reference;
-    client.description = updateDto.description ?? client.description;
-    client.routerSerial = updateDto.routerSerial ?? client.routerSerial;
-    client.decoSerial = updateDto.decoSerial ?? client.decoSerial;
-    client.ipAddress = updateDto.ipAddress ?? client.ipAddress;
-
-    if ('advancePayment' in updateDto) {
-      client.advancePayment = convertToBoolean(updateDto.advancePayment);
+    if (updateDto.name !== undefined) {
+      client.name = updateDto.name;
     }
-
-    if (updateDto.status) {
+    if (updateDto.lastName !== undefined) {
+      client.lastName = updateDto.lastName;
+    }
+    if (updateDto.phone !== undefined) {
+      client.phone = updateDto.phone;
+    }
+    if (updateDto.address !== undefined) {
+      client.address = updateDto.address;
+    }
+    if (updateDto.description !== undefined) {
+      client.description = updateDto.description;
+    }
+    if (updateDto.status !== undefined) {
       client.status = updateDto.status;
     }
-
-    if (updateDto.installationDate) {
-      client.installationDate = new Date(`${updateDto.installationDate}T12:00:00Z`);
-    }
-    if (updateDto.paymentDate) {
-      client.paymentDate = new Date(`${updateDto.paymentDate}T12:00:00Z`);
-    }
-    if (updateDto.plan !== undefined) {
-      client.plan = updateDto.plan ? { id: updateDto.plan } as any : null;
-    }
-    if (updateDto.sector !== undefined) {
-      client.sector = updateDto.sector ? { id: updateDto.sector } as any : null;
-    }
   }
 
   /**
-   * Maneja la actualización de la imagen de referencia
-   * Método auxiliar para update()
-   */
-  private async handleReferenceImageUpdate(client: Client, newImagePath: string): Promise<void> {
-    if (client.referenceImage) {
-      const fullOldPath = join(process.cwd(), client.referenceImage);
-      try {
-        await fs.unlink(fullOldPath);
-        this.logger.log(`Imagen antigua eliminada: ${fullOldPath}`);
-      } catch (error) {
-        this.logger.warn(`Error al eliminar la imagen antigua ${fullOldPath}: ${error.message}`);
-      }
-    }
-    client.referenceImage = newImagePath;
-  }
-
-  /**
-   * Elimina un cliente y su imagen de referencia
+   * Elimina un cliente
    */
   async remove(id: number) {
-    const client = await this.clientRepository.findOne({ where: { id } });
+    const client = await this.findOne(id);
     if (!client) {
-      throw new NotFoundException(`Client with ID ${id} not found`);
+      throw new NotFoundException(`Cliente con ID ${id} no encontrado`);
     }
-    if (client.referenceImage) {
-      const imagePath = join(process.cwd(), client.referenceImage);
+
+    // Eliminar imagen de referencia si existe
+    const installation = await this.installationRepository.findOne({
+      where: { client: { id } }
+    });
+
+    if (installation && installation.referenceImage) {
       try {
+        const imagePath = join(process.cwd(), installation.referenceImage);
         await fs.unlink(imagePath);
-        this.logger.log(`Imagen de referencia eliminada para cliente ID ${id}: ${imagePath}`);
       } catch (error) {
-        this.logger.warn(`Error al eliminar imagen de referencia para cliente ID ${id}: ${error.message}`);
+        this.logger.warn(`No se pudo eliminar la imagen: ${error.message}`);
       }
     }
-    return await this.clientRepository.remove(client);
+
+    await this.clientRepository.remove(client);
+    return { message: 'Cliente eliminado correctamente' };
   }
 
   /**
    * Recalcula y guarda el estado de pago de un cliente
-   * Este método es crucial para mantener actualizado el estado de los clientes
    */
-  async recalculateAndSaveClientPaymentStatus(clienteId: number): Promise<ClientEntityPaymentStatus> {
-    const client = await this.clientRepository.findOne({
-      where: { id: clienteId },
-      relations: [ 'payments' ]
+  async recalculateAndSaveClientPaymentStatus(clienteId: number): Promise<ClientPaymentStatus> {
+    const client = await this.findOne(clienteId);
+    if (!client) {
+      throw new NotFoundException(`Cliente con ID ${clienteId} no encontrado`);
+    }
+
+    // Obtener configuración de pago
+    const installation = await this.installationRepository.findOne({
+      where: { client: { id: clienteId } },
+      relations: [ 'paymentConfig' ]
     });
 
-    if (!client) {
-      this.logger.error(`recalculateAndSave: Cliente ID ${clienteId} no encontrado.`);
-      throw new NotFoundException(`Cliente ID ${clienteId} no encontrado para recalcular estado.`);
+    if (!installation || !installation.paymentConfig) {
+      return ClientPaymentStatus.EXPIRING;
     }
 
-    const { status, description } = this.calculatePaymentStatus(
-      client.paymentDate,
-      client.advancePayment
+    const { status } = this.calculatePaymentStatus(
+      installation.paymentConfig.initialPaymentDate,
+      installation.paymentConfig.advancePayment
     );
 
-    if (client.paymentStatus !== status) {
-      const updates: Partial<Client> = {
-        paymentStatus: status
-      };
-
-      // Si está suspendido, actualizar también el estado de cuenta
-      if (status === ClientEntityPaymentStatus.SUSPENDED && client.status !== AccountStatus.SUSPENDED) {
-        updates.status = AccountStatus.SUSPENDED;
-      }
-
-      await this.clientRepository.update(clienteId, updates);
-      this.logger.log(`Estado de cliente ID ${clienteId} actualizado: PaymentStatus=${status}${updates.status ? ', AccountStatus=' + updates.status : ''}`);
-    }
+    // Actualizar el estado en la configuración de pago
+    installation.paymentConfig.paymentStatus = status;
+    await this.clientPaymentConfigRepository.save(installation.paymentConfig);
 
     return status;
   }
 
   /**
-   * Calcula el estado general de un cliente
-   * Este método proporciona una descripción más detallada del estado
+   * Obtiene el estado general de un cliente
    */
   async getEstadoGeneralCliente(clienteId: number, clientEntity?: Client): Promise<string> {
-    const client = clientEntity || await this.clientRepository.findOne({ where: { id: clienteId } });
-
+    const client = clientEntity || await this.findOne(clienteId);
     if (!client) {
-      throw new NotFoundException(`Cliente con ID ${clienteId} no encontrado para getEstadoGeneralCliente.`);
+      throw new NotFoundException(`Cliente con ID ${clienteId} no encontrado`);
     }
 
-    const { description } = this.calculatePaymentStatus(
-      client.paymentDate,
-      client.advancePayment
-    );
+    const installation = await this.installationRepository.findOne({
+      where: { client: { id: clienteId } },
+      relations: [ 'paymentConfig' ]
+    });
 
-    return description;
+    if (!installation || !installation.paymentConfig) {
+      return `Cliente: ${client.name} ${client.lastName} - Estado: Sin configuración de pago`;
+    }
+
+    return `Cliente: ${client.name} ${client.lastName} - Estado: ${installation.paymentConfig.paymentStatus} - Fecha de pago: ${installation.paymentConfig.initialPaymentDate}`;
   }
 
   /**
-   * Sincroniza los estados de pago de todos los clientes
-   * Este método debe ejecutarse una vez para actualizar los registros existentes
+   * Sincroniza el estado de pago de todos los clientes
    */
   async syncAllClientsPaymentStatus(): Promise<void> {
-    this.logger.log('Iniciando sincronización de estados de pago de todos los clientes...');
+    const installations = await this.installationRepository.find({
+      relations: [ 'paymentConfig', 'client' ]
+    });
 
-    try {
-      // Obtener todos los clientes
-      const clients = await this.clientRepository.find();
-      let updated = 0;
-      let unchanged = 0;
-      let errors = 0;
-
-      // Procesar cada cliente
-      for (const client of clients) {
+    for (const installation of installations) {
+      if (installation.paymentConfig) {
         try {
-          const { status, description } = this.calculatePaymentStatus(
-            client.paymentDate,
-            client.advancePayment
+          const { status } = this.calculatePaymentStatus(
+            installation.paymentConfig.initialPaymentDate,
+            installation.paymentConfig.advancePayment
           );
 
-          // Solo actualizar si el estado ha cambiado
-          if (client.paymentStatus !== status) {
-            const updates: Partial<Client> = {
-              paymentStatus: status
-            };
-
-            // Actualizar estado de cuenta si está suspendido
-            if (status === ClientEntityPaymentStatus.SUSPENDED &&
-              client.status !== AccountStatus.SUSPENDED) {
-              updates.status = AccountStatus.SUSPENDED;
-            }
-
-            await this.clientRepository.update(client.id, updates);
-            this.logger.log(
-              `Cliente ID ${client.id} actualizado: ${client.paymentStatus} -> ${status} (${description})`
-            );
-            updated++;
-          } else {
-            unchanged++;
-          }
+          installation.paymentConfig.paymentStatus = status;
+          await this.clientPaymentConfigRepository.save(installation.paymentConfig);
         } catch (error) {
-          this.logger.error(
-            `Error al actualizar cliente ID ${client.id}: ${error.message}`
-          );
-          errors++;
+          this.logger.error(`Error sincronizando cliente ${installation.client.id}:`, error);
         }
       }
-
-      this.logger.log(`Sincronización completada:
-        - Total clientes: ${clients.length}
-        - Actualizados: ${updated}
-        - Sin cambios: ${unchanged}
-        - Errores: ${errors}`
-      );
-    } catch (error) {
-      this.logger.error('Error durante la sincronización:', error);
-      throw new Error('Error durante la sincronización de estados de pago');
     }
   }
 
   /**
    * Tarea programada para actualizar estados de clientes
-   * Se ejecuta todos los días a medianoche
    */
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleCronActualizarEstadoClientes() {
-    this.logger.log('Ejecutando actualización automática de estados de clientes...');
-    try {
-      await this.syncAllClientsPaymentStatus();
-      this.logger.log('Actualización automática completada exitosamente.');
-    } catch (error) {
-      this.logger.error('Error en la actualización automática:', error);
-    }
+    this.logger.log('Iniciando actualización automática de estados de clientes...');
+    await this.syncAllClientsPaymentStatus();
+    this.logger.log('Actualización automática de estados de clientes completada.');
   }
 
   /**
-   * Obtiene un resumen de los clientes según diferentes períodos
+   * Obtiene un resumen de clientes
    */
   async getSummary(getClientsSummaryDto: GetClientsSummaryDto) {
-    const { period } = getClientsSummaryDto;
-    let whereConditions: any = {};
+    const queryBuilder = this.clientRepository
+      .createQueryBuilder('client')
+      .leftJoinAndSelect('client.installations', 'installations')
+      .leftJoinAndSelect('installations.paymentConfig', 'paymentConfig');
 
-    const today = startOfDay(new Date());
-
-    // Configuración de períodos
-    if (period === 'today') {
-      const tomorrow = new Date(today);
-      tomorrow.setDate(today.getDate() + 1);
-      whereConditions.created_at = Between(today, tomorrow);
-    } else if (period === 'thisMonth') {
-      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      lastDayOfMonth.setHours(23, 59, 59, 999);
-      whereConditions.created_at = Between(firstDayOfMonth, lastDayOfMonth);
-    } else if (period === 'last7Days') {
-      const sevenDaysAgo = new Date(today);
-      sevenDaysAgo.setDate(today.getDate() - 6);
-      const dayAfterToday = new Date(today);
-      dayAfterToday.setDate(today.getDate() + 1);
-      whereConditions.created_at = Between(sevenDaysAgo, dayAfterToday);
+    // Aplicar filtros de fecha
+    if (getClientsSummaryDto.startDate && getClientsSummaryDto.endDate) {
+      queryBuilder.andWhere('client.created_at BETWEEN :startDate AND :endDate', {
+        startDate: getClientsSummaryDto.startDate,
+        endDate: getClientsSummaryDto.endDate
+      });
     }
 
-    const totalSystemClients = await this.clientRepository.count();
+    const clients = await queryBuilder.getMany();
 
-    // Conteo de clientes por estado
-    let clientesActivos = 0;
-    let clientesVencidos = 0;
-    let clientesPorVencer = 0;
-    let clientesSuspendidos = 0;
+    // Calcular estadísticas
+    const totalClients = clients.length;
+    const activeClients = clients.filter(c => c.status === AccountStatus.ACTIVE).length;
+    const suspendedClients = clients.filter(c => c.status === AccountStatus.SUSPENDED).length;
+    const inactiveClients = clients.filter(c => c.status === AccountStatus.INACTIVE).length;
 
-    // Obtener todos los clientes con sus datos completos
-    const allClients = await this.clientRepository.find();
+    // Contar estados de pago desde las instalaciones
+    let paidClients = 0;
+    let expiringClients = 0;
+    let expiredClients = 0;
+    let suspendedPaymentClients = 0;
 
-    for (const client of allClients) {
-      // Primero verificamos el estado de cuenta
-      if (client.status === AccountStatus.ACTIVE) {
-        clientesActivos++;
-      }
-
-      // Luego verificamos el estado de pago para las otras categorías
-      const { status, description } = this.calculatePaymentStatus(
-        client.paymentDate,
-        client.advancePayment
-      );
-
-      switch (status) {
-        case ClientEntityPaymentStatus.EXPIRED:
-          clientesVencidos++;
-          break;
-        case ClientEntityPaymentStatus.EXPIRING:
-          clientesPorVencer++;
-          break;
-        case ClientEntityPaymentStatus.SUSPENDED:
-          clientesSuspendidos++;
-          break;
+    for (const client of clients) {
+      for (const installation of client.installations) {
+        if (installation.paymentConfig) {
+          switch (installation.paymentConfig.paymentStatus) {
+            case ClientPaymentStatus.PAID:
+              paidClients++;
+              break;
+            case ClientPaymentStatus.EXPIRING:
+              expiringClients++;
+              break;
+            case ClientPaymentStatus.EXPIRED:
+              expiredClients++;
+              break;
+            case ClientPaymentStatus.SUSPENDED:
+              suspendedPaymentClients++;
+              break;
+          }
+        }
       }
     }
 
     return {
-      totalClientes: totalSystemClients,
-      clientesActivos,
-      clientesVencidos,
-      clientesPorVencer,
-      clientesSuspendidos,
-      period: period || 'allTime'
+      totalClients,
+      activeClients,
+      suspendedClients,
+      inactiveClients,
+      paidClients,
+      expiringClients,
+      expiredClients,
+      suspendedPaymentClients
     };
   }
 
   /**
-   * Actualiza el estado de un cliente específico
+   * Actualiza el estado de un cliente
    */
   async updateClientStatus(clientId: number) {
-    const client = await this.clientRepository.findOne({ where: { id: clientId } });
+    const client = await this.findOne(clientId);
     if (!client) {
       throw new NotFoundException(`Cliente con ID ${clientId} no encontrado`);
     }
 
-    const newStatus = await this.recalculateAndSaveClientPaymentStatus(clientId);
-    this.logger.log(`Estado del cliente ${clientId} actualizado a: ${newStatus}`);
-
-    return this.findOne(clientId);
+    await this.recalculateAndSaveClientPaymentStatus(clientId);
+    return await this.findOne(clientId);
   }
 
   /**
-   * Guarda una nueva imagen de referencia para un cliente
+   * Guarda una imagen de referencia para un cliente
    */
   async saveImage(clientId: number, filename: string): Promise<Client> {
-    const client = await this.clientRepository.findOne({ where: { id: clientId } });
+    const client = await this.findOne(clientId);
     if (!client) {
       throw new NotFoundException(`Cliente con ID ${clientId} no encontrado`);
     }
 
-    if (client.referenceImage) {
-      const oldImagePath = join(process.cwd(), client.referenceImage);
+    const installation = await this.installationRepository.findOne({
+      where: { client: { id: clientId } }
+    });
+
+    if (!installation) {
+      throw new NotFoundException(`Instalación no encontrada para el cliente ${clientId}`);
+    }
+
+    // Eliminar imagen anterior si existe
+    if (installation.referenceImage) {
       try {
+        const oldImagePath = join(process.cwd(), installation.referenceImage);
         await fs.unlink(oldImagePath);
       } catch (error) {
-        this.logger.warn('Error al eliminar la imagen anterior:', error.message);
+        this.logger.warn(`No se pudo eliminar la imagen anterior: ${error.message}`);
       }
     }
 
-    client.referenceImage = filename;
-    return this.clientRepository.save(client);
+    installation.referenceImage = filename;
+    await this.installationRepository.save(installation);
+
+    return client;
   }
 
   /**
    * Elimina la imagen de referencia de un cliente
    */
   async deleteImage(clientId: number): Promise<void> {
-    const client = await this.clientRepository.findOne({ where: { id: clientId } });
-    if (!client || !client.referenceImage) {
-      this.logger.warn(`Intento de eliminar imagen para cliente ID ${clientId} sin imagen existente.`);
-      return;
+    const client = await this.findOne(clientId);
+    if (!client) {
+      throw new NotFoundException(`Cliente con ID ${clientId} no encontrado`);
     }
 
-    const imagePath = join(process.cwd(), client.referenceImage);
+    const installation = await this.installationRepository.findOne({
+      where: { client: { id: clientId } }
+    });
+
+    if (!installation || !installation.referenceImage) {
+      throw new NotFoundException(`No se encontró imagen de referencia para el cliente ${clientId}`);
+    }
+
+    const imagePath = join(process.cwd(), installation.referenceImage);
     try {
       await fs.unlink(imagePath);
-      this.logger.log(`Imagen eliminada: ${imagePath}`);
     } catch (error) {
-      this.logger.error(`Error al eliminar el archivo ${imagePath}:`, error);
+      this.logger.error(`Error eliminando imagen: ${error.message}`);
+      throw new Error('No se pudo eliminar la imagen');
     }
 
-    client.referenceImage = null;
-    await this.clientRepository.save(client);
-    this.logger.log(`Referencia de imagen eliminada para cliente ID ${clientId}`);
+    installation.referenceImage = null;
+    await this.installationRepository.save(installation);
   }
-}
+} 

@@ -4,10 +4,20 @@ import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
 import { Payment } from './entities/payment.entity';
 import { Client } from 'src/client/entities/client.entity';
-import { PaymentHistory } from 'src/payment-history/entities/payment-history.entity';
+import { PaymentHistory } from 'src/payment-histories/entities/payment-history.entity';
+import { Installation } from 'src/installations/entities/installation.entity';
+import { ClientPaymentConfig } from 'src/client-payment-config/entities/client-payment-config.entity';
 
 @Module({
-  imports: [ TypeOrmModule.forFeature([ Payment, Client, PaymentHistory ]) ],
+  imports: [
+    TypeOrmModule.forFeature([
+      Payment,
+      Client,
+      PaymentHistory,
+      Installation,
+      ClientPaymentConfig
+    ])
+  ],
   controllers: [ PaymentsController ],
   providers: [ PaymentsService ],
 })

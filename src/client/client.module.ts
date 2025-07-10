@@ -5,6 +5,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Client } from './entities/client.entity';
 import { Plan } from 'src/plans/entities/plan.entity';
 import { Payment } from 'src/payments/entities/payment.entity';
+import { Installation } from 'src/installations/entities/installation.entity';
+import { ClientPaymentConfig } from 'src/client-payment-config/entities/client-payment-config.entity';
+import { Device } from 'src/devices/entities/device.entity';
 import { ScheduleModule } from '@nestjs/schedule';
 import { MulterModule } from '@nestjs/platform-express';
 import { existsSync, mkdirSync } from 'fs';
@@ -18,7 +21,14 @@ if (!existsSync(uploadDir)) {
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ Client, Plan, Payment ]),
+    TypeOrmModule.forFeature([
+      Client,
+      Plan,
+      Payment,
+      Installation,
+      ClientPaymentConfig,
+      Device
+    ]),
     ScheduleModule.forRoot(),
     MulterModule.register({
       dest: uploadDir,

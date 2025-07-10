@@ -1,6 +1,7 @@
 import { Client } from 'src/client/entities/client.entity';
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne, JoinColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne, JoinColumn, UpdateDateColumn, OneToMany } from 'typeorm';
 import { User } from 'src/user/entities/user.entity';
+import { PaymentHistory } from 'src/payment-histories/entities/payment-history.entity';
 
 export enum PaymentType {
     TRANSFER = 'TRANSFER',
@@ -10,7 +11,6 @@ export enum PaymentType {
     OTHER = 'OTHER',
 }
 
-
 export enum PaymentStatus {
     PENDING = 'PENDING',
     PAYMENT_DAILY = 'PAYMENT_DAILY',
@@ -18,7 +18,7 @@ export enum PaymentStatus {
     VOIDED = 'VOIDED'
 }
 
-@Entity()
+@Entity('payments')
 export class Payment {
     @PrimaryGeneratedColumn()
     id: number;
@@ -28,7 +28,6 @@ export class Payment {
 
     @Column({ nullable: true })
     paymentDate?: Date;
-
 
     @Column({ nullable: true })
     reference: string;
@@ -46,7 +45,7 @@ export class Payment {
     reconnectionFee: number;
 
     @Column({ type: 'enum', enum: PaymentStatus, nullable: true })
-    state: PaymentStatus;
+    status: PaymentStatus;
 
     @Column({ type: 'enum', enum: PaymentType, nullable: true })
     paymentType: PaymentType;
@@ -60,16 +59,6 @@ export class Payment {
     @Column({ nullable: true })
     dueDate?: Date;
 
-    @ManyToOne(() => Client, { eager: true, nullable: true, onDelete: 'SET NULL', onUpdate: 'CASCADE' })
-    @JoinColumn({ name: 'clientId' })
-    client: Client;
-
-    @CreateDateColumn({ type: "timestamp", default: () => "CURRENT_TIMESTAMP(6)" })
-    public created_At: Date;
-
-    @UpdateDateColumn({ type: "timestamp", default: () => "CURRENT_TIMESTAMP(6)", onUpdate: "CURRENT_TIMESTAMP(6)" })
-    public updated_At: Date;
-
     @Column({ default: false })
     isVoided: boolean;
 
@@ -78,4 +67,20 @@ export class Payment {
 
     @Column({ nullable: true })
     voidedReason?: string;
+
+    @Column({ nullable: true })
+    engagementDate: Date;
+
+    @ManyToOne(() => Client, { eager: true, nullable: true, onDelete: 'SET NULL', onUpdate: 'CASCADE' })
+    @JoinColumn({ name: 'clientId' })
+    client: Client;
+
+    @OneToMany(() => PaymentHistory, (paymentHistory) => paymentHistory.payment)
+    paymentHistories: PaymentHistory[];
+
+    @CreateDateColumn({ type: "timestamp", default: () => "CURRENT_TIMESTAMP(6)" })
+    public created_at: Date;
+
+    @UpdateDateColumn({ type: "timestamp", default: () => "CURRENT_TIMESTAMP(6)", onUpdate: "CURRENT_TIMESTAMP(6)" })
+    public updated_at: Date;
 } 

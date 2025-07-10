@@ -1,3 +1,4 @@
+import { Employee } from 'src/employees/entities/employee.entity';
 import { RoleHasPermission } from 'src/role-has-permissions/entities/role-has-permission.entity';
 import { Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, OneToMany, Entity } from 'typeorm';
 
@@ -22,6 +23,9 @@ export class Role {
         cascade: true,
     })
     role_has_permissions: RoleHasPermission[];
+
+    @OneToMany(() => Employee, employee => employee.role)
+    employees: Employee[];
 
     @CreateDateColumn({ type: "timestamp", default: () => "CURRENT_TIMESTAMP(6)" })
     public created_at: Date;

@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, CreateDateColumn, UpdateDateColumn, JoinColumn } from 'typeorm';
-import { Client } from 'src/client/entities/client.entity';
+import { Installation } from 'src/installations/entities/installation.entity';
 import { Service } from '../../services/entities/service.entity';
 
 @Entity('plans')
@@ -23,8 +23,8 @@ export class Plan {
   @JoinColumn({ name: 'serviceId' })
   service: Service;
 
-  @OneToMany(() => Client, (client) => client.plan)
-  clients: Client[];
+  @OneToMany(() => Installation, (installation) => installation.plan)
+  installations: Installation[];
 
   @CreateDateColumn({ type: "timestamp", default: () => "CURRENT_TIMESTAMP(6)" })
   public created_at: Date;

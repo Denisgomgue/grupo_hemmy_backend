@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany, UpdateDateColumn, CreateDateColumn } from 'typeorm';
-import { Client } from 'src/client/entities/client.entity';
+import { Installation } from 'src/installations/entities/installation.entity';
 
 @Entity('sectors')
 export class Sector {
@@ -12,8 +12,8 @@ export class Sector {
   @Column({ nullable: true })
   description: string;
 
-  @OneToMany(() => Client, client => client.sector)
-  clients: Client[];
+  @OneToMany(() => Installation, installation => installation.sector)
+  installations: Installation[];
 
   @CreateDateColumn({ type: "timestamp", default: () => "CURRENT_TIMESTAMP(6)" })
   public created_at: Date;

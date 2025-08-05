@@ -41,4 +41,9 @@ export class EmployeesController {
     remove(@Param('id') id: string) {
         return this.employeesService.remove(+id);
     }
+
+    @Get('summary')
+    getSummary() {
+        return this.employeesService.getSummary();
+    }
 } 

@@ -63,22 +63,22 @@ export class Device {
     useType: DeviceUseType;
 
 
-    @Column({ nullable: true })
-    assignedInstallationId: number;
+    @Column({ nullable: true, type: 'int' })
+    assignedInstallationId: number | null;
 
     @ManyToOne(() => Installation, { nullable: true, onDelete: 'SET NULL' })
     @JoinColumn({ name: 'assignedInstallationId' })
     installation: Installation;
 
-    @Column({ nullable: true })
-    assignedEmployeeId: number;
+    @Column({ nullable: true, type: 'int' })
+    assignedEmployeeId: number | null;
 
     @ManyToOne(() => Employee, { nullable: true, onDelete: 'SET NULL' })
     @JoinColumn({ name: 'assignedEmployeeId' })
     employee: Employee;
 
-    @Column({ nullable: true })
-    assignedClientId: number;
+    @Column({ nullable: true, type: 'int' })
+    assignedClientId: number | null;
 
     @ManyToOne(() => Client, { nullable: true, onDelete: 'SET NULL' })
     @JoinColumn({ name: 'assignedClientId' })

@@ -7,10 +7,12 @@ import { CommandModule } from 'nestjs-command';
 import { DatabaseSeederCommand } from './database-seeder.command';
 import { Permission } from '../../permission/entities/permission.entity';
 import { RoleHasPermission } from '../../role-has-permissions/entities/role-has-permission.entity';
+import { Resource } from '../../resources/entities/resource.entity';
+import { Company } from '../../company/entities/company.entity';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([ User, Role, Permission, RoleHasPermission ]),
+        TypeOrmModule.forFeature([ User, Role, Permission, RoleHasPermission, Resource, Company ]),
         CommandModule,
     ],
     providers: [ DatabaseSeederService, DatabaseSeederCommand ],

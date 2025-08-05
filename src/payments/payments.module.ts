@@ -7,6 +7,7 @@ import { Client } from 'src/client/entities/client.entity';
 import { PaymentHistory } from 'src/payment-histories/entities/payment-history.entity';
 import { Installation } from 'src/installations/entities/installation.entity';
 import { ClientPaymentConfig } from 'src/client-payment-config/entities/client-payment-config.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -16,7 +17,8 @@ import { ClientPaymentConfig } from 'src/client-payment-config/entities/client-p
       PaymentHistory,
       Installation,
       ClientPaymentConfig
-    ])
+    ]),
+    NotificationsModule
   ],
   controllers: [ PaymentsController ],
   providers: [ PaymentsService ],

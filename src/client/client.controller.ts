@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe, Query, UseInterceptors, UploadedFile, ConflictException, BadRequestException, HttpStatus, DefaultValuePipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe, Query, UseInterceptors, UploadedFile, ConflictException, BadRequestException, HttpStatus, DefaultValuePipe, NotFoundException } from '@nestjs/common';
 import { ClientService } from './client.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
@@ -30,60 +30,52 @@ const storage = diskStorage({
 
 @Controller('client')
 export class ClientController {
-  private readonly uploadDir = 'uploads/clients';
-
   constructor(private readonly clientService: ClientService) { }
 
   @Post()
-  @UseInterceptors(FileInterceptor('referenceImage', {
-    storage,
-    fileFilter: (req, file, cb) => {
-      if (!file.mimetype.match(/\/(jpg|jpeg|png|gif)$/)) {
-        return cb(null, false);
-      }
-      cb(null, true);
-    },
-    limits: {
-      fileSize: 2 * 1024 * 1024 // 2MB
-    }
-  }))
-  async create(@Body() createClientDto: CreateClientDto, @UploadedFile() file?: Express.Multer.File) {
+  @UseInterceptors(FileInterceptor('referenceImage', { storage }))
+  async create(@Body() createDto: CreateClientDto, @UploadedFile() file?: Express.Multer.File) {
     try {
-      // Crear el cliente dentro de una transacción
-      // La validación del DNI se realiza dentro de createWithTransaction
-      const result = await this.clientService.createWithTransaction(createClientDto);
+      // Crear cliente
 
-      console.log('Cliente creado:', {
-        id: result.id,
-        dni: result.dni
-      });
-
-      return result;
+      if (file) {
+        // Guardar la ruta completa en lugar de solo el nombre del archivo
+        createDto.referenceImage = `uploads/clients/${file.filename}`;
+      }
+      return this.clientService.create(createDto);
     } catch (error) {
-      console.error('Error al crear cliente:', error);
-
-      // Si es un error conocido, lo lanzamos tal cual
-      if (error instanceof BadRequestException || error instanceof ConflictException) {
+      if (error instanceof ConflictException) {
         throw error;
       }
-
-      // Para otros errores, lanzamos un error genérico
-      throw new BadRequestException('Error al crear el cliente. Por favor, inténtelo de nuevo.');
+      throw new BadRequestException('Error al crear cliente');
     }
   }
 
   @Patch(':id')
+  @UseInterceptors(FileInterceptor('referenceImage', { storage }))
   async update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateClientDto: UpdateClientDto
+    @Body() updateDto: UpdateClientDto,
+    @UploadedFile() file?: Express.Multer.File
   ) {
-    return this.clientService.update(id, updateClientDto);
+    try {
+      if (file) {
+        // Guardar la ruta completa en lugar de solo el nombre del archivo
+        updateDto.referenceImage = `uploads/clients/${file.filename}`;
+      }
+      return this.clientService.update(id, updateDto);
+    } catch (error) {
+      if (error instanceof ConflictException) {
+        throw error;
+      }
+      throw new BadRequestException('Error al actualizar cliente');
+    }
   }
 
   @Get()
-  findAll(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
+  async findAll(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('search') search?: string,
     @Query('status') status?: string[],
     @Query('services') services?: string[],
@@ -91,105 +83,73 @@ export class ClientController {
     @Query('maxCost') maxCost?: string,
     @Query('sectors') sectors?: string[]
   ) {
-    const parsedPage = page ? parseInt(page, 10) : 1;
-    const parsedLimit = limit ? parseInt(limit, 10) : 10;
-    const parsedMinCost = minCost ? parseInt(minCost, 10) : undefined;
-    const parsedMaxCost = maxCost ? parseInt(maxCost, 10) : undefined;
-
-    if (isNaN(parsedPage) || isNaN(parsedLimit)) {
-      throw new BadRequestException('Los parámetros de paginación deben ser números válidos');
-    }
-
-    if ((minCost && isNaN(parsedMinCost)) || (maxCost && isNaN(parsedMaxCost))) {
-      throw new BadRequestException('Los parámetros de costo deben ser números válidos');
-    }
-
     return this.clientService.findAll(
-      parsedPage,
-      parsedLimit,
+      page,
+      limit,
       search,
       status,
       services,
-      parsedMinCost,
-      parsedMaxCost,
+      minCost ? +minCost : undefined,
+      maxCost ? +maxCost : undefined,
       sectors
     );
   }
 
+  @Get('validate-dni/:dni')
+  async validateDni(
+    @Param('dni') dni: string,
+    @Query('excludeId') excludeId?: string
+  ) {
+    const isValid = await this.clientService.validateDni(dni, excludeId ? +excludeId : undefined);
+    return { valid: isValid };
+  }
+
+  @Post('sync-states')
+  async syncStates() {
+    await this.clientService.syncAllClientsPaymentStatus();
+    return { message: 'Estados de clientes sincronizados correctamente' };
+  }
+
+  @Get('search-by-dni/:dni')
+  async searchByDni(@Param('dni') dni: string) {
+    return this.clientService.findByDni(dni);
+  }
+
   @Get('summary')
-  getSummary(@Query() getClientsSummaryDto: GetClientsSummaryDto) {
+  async getSummary(@Query() getClientsSummaryDto: GetClientsSummaryDto) {
     return this.clientService.getSummary(getClientsSummaryDto);
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number) {
+  async findOne(@Param('id', ParseIntPipe) id: number) {
     return this.clientService.findOne(id);
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
+  async remove(@Param('id', ParseIntPipe) id: number) {
     return this.clientService.remove(id);
   }
 
-  @Public()
-  @Post('update-all-states')
-  async updateAllStates() {
-    const { data: clients } = await this.clientService.findAll(1, 9999); // Obtener todos los clientes
-    const results = [];
-
-    for (const client of clients) {
-      try {
-        const updatedClient = await this.clientService.updateClientStatus(client.id);
-        results.push({
-          id: client.id,
-          name: client.name,
-          oldStatus: client.status,
-          newStatus: updatedClient.status
-        });
-      } catch (error) {
-        results.push({
-          id: client.id,
-          name: client.name,
-          error: error.message
-        });
-      }
-    }
-
-    return {
-      message: 'Estados de clientes actualizados correctamente',
-      results
-    };
+  @Post(':id/status')
+  async updateClientStatus(@Param('id', ParseIntPipe) id: number) {
+    return this.clientService.updateClientStatus(id);
   }
 
-  @Get('validate-dni/:dni')
-  async validateDni(@Param('dni') dni: string) {
-    try {
-      // Validar formato del DNI
-      if (!/^\d{8}$/.test(dni)) {
-        return {
-          valid: false,
-          message: 'El DNI debe contener exactamente 8 dígitos'
-        };
-      }
-
-      // Verificar si el DNI ya existe
-      const exists = await this.clientService.checkDniExists(dni);
-      return {
-        valid: !exists,
-        message: exists ? 'El DNI ya está registrado' : 'DNI disponible'
-      };
-    } catch (error) {
-      return {
-        valid: false,
-        message: 'Error al validar el DNI'
-      };
+  @Post(':id/image')
+  @UseInterceptors(FileInterceptor('image', { storage }))
+  async saveImage(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File
+  ) {
+    if (!file) {
+      throw new BadRequestException('No se proporcionó imagen');
     }
+    // Guardar la ruta completa en lugar de solo el nombre del archivo
+    return this.clientService.saveImage(id, `uploads/clients/${file.filename}`);
   }
 
-  @Public()
-  @Post('sync-states')
-  async syncStates() {
-    await this.clientService.syncAllClientsPaymentStatus();
-    return { message: 'Estados sincronizados correctamente' };
+  @Delete(':id/image')
+  async deleteImage(@Param('id', ParseIntPipe) id: number) {
+    return this.clientService.deleteImage(id);
   }
 }

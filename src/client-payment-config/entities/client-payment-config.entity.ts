@@ -8,6 +8,11 @@ export enum PaymentStatus {
     PAID = 'PAID'
 }
 
+export enum PaymentConfigStatus {
+    ACTIVE = 'ACTIVE',
+    INACTIVE = 'INACTIVE'
+}
+
 @Entity('client_payment_configs')
 export class ClientPaymentConfig {
     @PrimaryGeneratedColumn()
@@ -24,6 +29,13 @@ export class ClientPaymentConfig {
 
     @Column({ type: 'enum', enum: PaymentStatus, default: PaymentStatus.PAID })
     paymentStatus: PaymentStatus;
+
+    @Column({
+        type: 'enum',
+        enum: PaymentConfigStatus,
+        default: PaymentConfigStatus.ACTIVE
+    })
+    status: PaymentConfigStatus;
 
     @OneToOne(() => Installation, (installation) => installation.paymentConfig)
     @JoinColumn({ name: 'installationId' })

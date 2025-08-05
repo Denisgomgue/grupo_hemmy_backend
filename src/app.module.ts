@@ -11,6 +11,8 @@ import { Employee } from "./employees/entities/employee.entity";
 import { ClientPaymentConfig } from "./client-payment-config/entities/client-payment-config.entity";
 import { Payment } from "./payments/entities/payment.entity";
 import { PaymentHistory } from "./payment-histories/entities/payment-history.entity";
+import { Company } from "./company/entities/company.entity";
+import { Notification } from "./notifications/entities/notification.entity";
 import { UserModule } from "./user/user.module";
 import { ClientModule } from "./client/client.module";
 import { PlansModule } from "./plans/plans.module";
@@ -31,15 +33,22 @@ import { DatabaseSeederModule } from "./database/seeders/database-seeder.module"
 import { Role } from "./role/entities/role.entity";
 import { Permission } from "./permission/entities/permission.entity";
 import { RoleHasPermission } from "./role-has-permissions/entities/role-has-permission.entity";
+import { Resource } from "./resources/entities/resource.entity";
 import { RoleHasPermissionsModule } from "./role-has-permissions/role-has-permissions.module";
 import { RoleModule } from "./role/role.module";
 import { PermissionModule } from "./permission/permission.module";
+import { ResourcesModule } from "./resources/resources.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { UploadModule } from './upload/upload.module';
+import { CompanyModule } from './company/company.module';
+import { NotificationsModule } from './notifications/notifications.module';
+// exportar env
+// export const envFilePath = '.env';
 
 @Module({
   imports: [
-    ConfigModule.forRoot(),
+    ConfigModule.forRoot({
+    }),
     TypeOrmModule.forRoot({
       type: 'mysql',
       host: process.env.DB_HOST,
@@ -47,6 +56,7 @@ import { UploadModule } from './upload/upload.module';
       username: process.env.DB_USER,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_NAME,
+
       entities: [
         User,
         Client,
@@ -56,12 +66,15 @@ import { UploadModule } from './upload/upload.module';
         Role,
         Permission,
         RoleHasPermission,
+        Resource,
         Payment,
         PaymentHistory,
         Installation,
         Device,
         Employee,
-        ClientPaymentConfig
+        ClientPaymentConfig,
+        Company,
+        Notification
       ],
       synchronize: true, // Habilitado para desarrollo
       //migrationsRun: true,
@@ -83,8 +96,11 @@ import { UploadModule } from './upload/upload.module';
     RoleHasPermissionsModule,
     RoleModule,
     PermissionModule,
+    ResourcesModule,
     PaymentsModule,
     UploadModule,
+    CompanyModule,
+    NotificationsModule,
   ],
   controllers: [ AppController ],
   providers: [
@@ -95,4 +111,5 @@ import { UploadModule } from './upload/upload.module';
     },
   ],
 })
+
 export class AppModule { }

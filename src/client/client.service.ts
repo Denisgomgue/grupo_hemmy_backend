@@ -1,5 +1,5 @@
 /**
- * Servicio para la gestión de clientes - Versión actualizada para nueva estructura
+ * Servicio para la gestión de clientes - Versión simplificada SIN workflow
  * Este servicio maneja todas las operaciones relacionadas con los clientes:
  * - CRUD de clientes
  * - Gestión de estados de pago a través de installations
@@ -13,14 +13,17 @@ import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { Client, AccountStatus } from './entities/client.entity';
 import { Payment, PaymentStatus } from '../payments/entities/payment.entity';
-import { Installation } from '../installations/entities/installation.entity';
-import { ClientPaymentConfig, PaymentStatus as ClientPaymentStatus } from '../client-payment-config/entities/client-payment-config.entity';
+import { Installation, InstallationStatus } from '../installations/entities/installation.entity';
+import { ClientPaymentConfig, PaymentStatus as ClientPaymentStatus, PaymentConfigStatus } from '../client-payment-config/entities/client-payment-config.entity';
 import { Device } from '../devices/entities/device.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { addMonths, differenceInDays, startOfDay } from 'date-fns';
 import { GetClientsSummaryDto } from './dto/get-clients-summary.dto';
 import { join } from 'path';
 import * as fs from 'fs/promises';
+import { Plan } from '../plans/entities/plan.entity';
+import { Sector } from '../sectors/entities/sector.entity';
+import { parseDateString } from '../utils/date.utils';
 
 /**
  * Utilidad para convertir diferentes tipos de valores a booleano
@@ -50,6 +53,10 @@ export class ClientService {
     private readonly clientPaymentConfigRepository: Repository<ClientPaymentConfig>,
     @InjectRepository(Device)
     private readonly deviceRepository: Repository<Device>,
+    @InjectRepository(Plan)
+    private readonly planRepository: Repository<Plan>,
+    @InjectRepository(Sector)
+    private readonly sectorRepository: Repository<Sector>,
     private readonly dataSource: DataSource
   ) { }
 
@@ -74,6 +81,42 @@ export class ClientService {
       return !!client;
     } catch (error) {
       this.logger.error(`Error en checkDniExists (DNI: ${dni}, excludeId: ${excludeId}):`, error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  /**
+   * Valida si un DNI está disponible
+   * @param dni - DNI a validar
+   * @param excludeId - ID del cliente a excluir
+   * @returns boolean - true si está disponible, false si ya existe
+   */
+  async validateDni(dni: string, excludeId?: number): Promise<boolean> {
+    const exists = await this.checkDniExists(dni, excludeId);
+    return !exists; // true = válido, false = ya existe
+  }
+
+  /**
+   * Busca un cliente por DNI
+   * @param dni - DNI del cliente a buscar
+   * @returns Cliente encontrado o null
+   */
+  async findByDni(dni: string): Promise<Client | null> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+
+    try {
+      const client = await queryRunner.manager.findOne(Client, {
+        where: { dni },
+        relations: [ 'installations', 'installations.plan', 'installations.sector', 'installations.paymentConfig', 'devices' ],
+        select: [ 'id', 'name', 'lastName', 'dni', 'phone', 'address', 'status', 'birthdate', 'description' ]
+      });
+
+      return client;
+    } catch (error) {
+      this.logger.error(`Error en findByDni (DNI: ${dni}):`, error);
       throw error;
     } finally {
       await queryRunner.release();
@@ -146,9 +189,11 @@ export class ClientService {
 
   /**
    * Crea un nuevo cliente con manejo de transacciones
-   * Incluye validación de DNI
+   * Incluye validación de DNI y creación de instalación y configuración de pago
    */
-  async createWithTransaction(createClientDto: CreateClientDto): Promise<Client> {
+  async create(createClientDto: CreateClientDto): Promise<Client> {
+    // Crear cliente
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction('SERIALIZABLE');
@@ -169,11 +214,90 @@ export class ClientService {
         address: createClientDto.address,
         status: createClientDto.status || AccountStatus.ACTIVE,
         description: createClientDto.description,
+        birthdate: createClientDto.birthdate ? new Date(createClientDto.birthdate) : undefined,
       };
 
       // Crear el cliente
       const client = queryRunner.manager.create(Client, clientData);
       const savedClient = await queryRunner.manager.save(Client, client);
+
+      // Crear instalación si se proporcionan datos
+      if (createClientDto.planId && createClientDto.sectorId) {
+        const plan = await this.planRepository.findOne({ where: { id: createClientDto.planId } });
+        if (!plan) {
+          throw new NotFoundException(`Plan con ID ${createClientDto.planId} no encontrado`);
+        }
+
+        const sector = await this.sectorRepository.findOne({ where: { id: createClientDto.sectorId } });
+        if (!sector) {
+          throw new NotFoundException(`Sector con ID ${createClientDto.sectorId} no encontrado`);
+        }
+
+        const installationData: Partial<Installation> = {
+          client: savedClient,
+          installationDate: createClientDto.installationDate ? parseDateString(createClientDto.installationDate) : new Date(),
+          reference: createClientDto.reference,
+          ipAddress: createClientDto.ipAddress,
+          referenceImage: createClientDto.referenceImage,
+          plan,
+          sector,
+          status: InstallationStatus.ACTIVE,
+        };
+
+        const installation = queryRunner.manager.create(Installation, installationData);
+        const savedInstallation = await queryRunner.manager.save(Installation, installation);
+
+        // Crear configuración de pago si se proporcionan datos
+        if (createClientDto.paymentDate !== undefined || createClientDto.advancePayment !== undefined) {
+          const { status: paymentStatus } = this.calculatePaymentStatus(
+            createClientDto.paymentDate ? parseDateString(createClientDto.paymentDate) : null,
+            createClientDto.advancePayment === true
+          );
+
+          // Debug: Log del valor de advancePayment recibido
+          // Preparar datos de configuración de pagos
+
+          const paymentConfigData: Partial<ClientPaymentConfig> = {
+            installationId: savedInstallation.id,
+            initialPaymentDate: createClientDto.paymentDate ? parseDateString(createClientDto.paymentDate) : null,
+            advancePayment: createClientDto.advancePayment === true,
+            paymentStatus: paymentStatus,
+            status: PaymentConfigStatus.ACTIVE,
+          };
+
+
+
+          // Guardar configuración de pagos
+
+          const paymentConfig = queryRunner.manager.create(ClientPaymentConfig, paymentConfigData);
+          await queryRunner.manager.save(ClientPaymentConfig, paymentConfig);
+        }
+
+        // Crear dispositivos si se proporcionan
+        if (createClientDto.routerSerial) {
+          const routerDevice: Partial<Device> = {
+            serialNumber: createClientDto.routerSerial,
+            type: 'router' as any,
+            status: 'ASSIGNED' as any,
+            useType: 'CLIENT' as any,
+            assignedClientId: savedClient.id,
+            assignedInstallationId: savedInstallation.id,
+          };
+          await queryRunner.manager.save(Device, queryRunner.manager.create(Device, routerDevice));
+        }
+
+        if (createClientDto.decoSerial) {
+          const decoDevice: Partial<Device> = {
+            serialNumber: createClientDto.decoSerial,
+            type: 'deco' as any,
+            status: 'ASSIGNED' as any,
+            useType: 'CLIENT' as any,
+            assignedClientId: savedClient.id,
+            assignedInstallationId: savedInstallation.id,
+          };
+          await queryRunner.manager.save(Device, queryRunner.manager.create(Device, decoDevice));
+        }
+      }
 
       await queryRunner.commitTransaction();
       this.logger.log(`Cliente creado ID ${savedClient.id}, DNI: ${savedClient.dni}`);
@@ -182,7 +306,7 @@ export class ClientService {
       if (queryRunner.isTransactionActive) {
         await queryRunner.rollbackTransaction();
       }
-      this.logger.error(`Error en createWithTransaction:`, error);
+      this.logger.error(`Error en create:`, error);
       throw error;
     } finally {
       await queryRunner.release();
@@ -206,9 +330,11 @@ export class ClientService {
       .createQueryBuilder('client')
       .leftJoinAndSelect('client.installations', 'installations')
       .leftJoinAndSelect('installations.plan', 'plan')
+      .leftJoinAndSelect('plan.service', 'service')
       .leftJoinAndSelect('installations.sector', 'sector')
       .leftJoinAndSelect('installations.paymentConfig', 'paymentConfig')
-      .leftJoinAndSelect('client.devices', 'devices');
+      .leftJoinAndSelect('client.devices', 'devices')
+      .leftJoinAndSelect('client.payments', 'payments', 'payments.isVoided = :isVoided', { isVoided: false });
 
     // Aplicar filtros
     if (search) {
@@ -268,11 +394,85 @@ export class ClientService {
     await queryRunner.startTransaction();
 
     try {
+      // Validar DNI único (excluyendo el cliente actual)
+      if (updateClientDto.dni && updateClientDto.dni !== client.dni) {
+        const dniExists = await queryRunner.manager.exists(Client, {
+          where: { dni: updateClientDto.dni, id: Not(id) }
+        });
+        if (dniExists) {
+          throw new ConflictException(`El DNI ${updateClientDto.dni} ya está registrado.`);
+        }
+      }
+
       // Actualizar campos básicos del cliente
       this.updateBasicFields(client, updateClientDto);
-
-      // Guardar cliente actualizado
       const updatedClient = await queryRunner.manager.save(Client, client);
+
+      // Actualizar instalación si se proporcionan datos
+      const installation = await this.installationRepository.findOne({
+        where: { client: { id } }
+      });
+
+      if (installation && (updateClientDto.planId || updateClientDto.sectorId || updateClientDto.installationDate || updateClientDto.reference || updateClientDto.ipAddress)) {
+        if (updateClientDto.planId) {
+          const plan = await this.planRepository.findOne({ where: { id: updateClientDto.planId } });
+          if (!plan) {
+            throw new NotFoundException(`Plan con ID ${updateClientDto.planId} no encontrado`);
+          }
+          installation.plan = plan;
+        }
+
+        if (updateClientDto.sectorId) {
+          const sector = await this.sectorRepository.findOne({ where: { id: updateClientDto.sectorId } });
+          if (!sector) {
+            throw new NotFoundException(`Sector con ID ${updateClientDto.sectorId} no encontrado`);
+          }
+          installation.sector = sector;
+        }
+
+        if (updateClientDto.installationDate) {
+          installation.installationDate = parseDateString(updateClientDto.installationDate);
+        }
+
+        if (updateClientDto.reference !== undefined) {
+          installation.reference = updateClientDto.reference;
+        }
+
+        if (updateClientDto.ipAddress !== undefined) {
+          installation.ipAddress = updateClientDto.ipAddress;
+        }
+
+        if (updateClientDto.referenceImage) {
+          installation.referenceImage = updateClientDto.referenceImage;
+        }
+
+        await queryRunner.manager.save(Installation, installation);
+      }
+
+      // Actualizar configuración de pago si se proporcionan datos
+      if (installation && (updateClientDto.paymentDate !== undefined || updateClientDto.advancePayment !== undefined)) {
+        const paymentConfig = await this.clientPaymentConfigRepository.findOne({
+          where: { installationId: installation.id }
+        });
+
+        if (paymentConfig) {
+          if (updateClientDto.paymentDate !== undefined) {
+            paymentConfig.initialPaymentDate = updateClientDto.paymentDate ? new Date(updateClientDto.paymentDate) : null;
+          }
+
+          if (updateClientDto.advancePayment !== undefined) {
+            paymentConfig.advancePayment = updateClientDto.advancePayment;
+          }
+
+          const { status: paymentStatus } = this.calculatePaymentStatus(
+            paymentConfig.initialPaymentDate,
+            paymentConfig.advancePayment
+          );
+
+          paymentConfig.paymentStatus = paymentStatus;
+          await queryRunner.manager.save(ClientPaymentConfig, paymentConfig);
+        }
+      }
 
       await queryRunner.commitTransaction();
       return updatedClient;
@@ -297,6 +497,9 @@ export class ClientService {
     if (updateDto.lastName !== undefined) {
       client.lastName = updateDto.lastName;
     }
+    if (updateDto.dni !== undefined) {
+      client.dni = updateDto.dni;
+    }
     if (updateDto.phone !== undefined) {
       client.phone = updateDto.phone;
     }
@@ -305,6 +508,9 @@ export class ClientService {
     }
     if (updateDto.description !== undefined) {
       client.description = updateDto.description;
+    }
+    if (updateDto.birthdate !== undefined) {
+      client.birthdate = updateDto.birthdate ? new Date(updateDto.birthdate) : undefined;
     }
     if (updateDto.status !== undefined) {
       client.status = updateDto.status;

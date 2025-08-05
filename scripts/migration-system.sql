@@ -432,7 +432,7 @@ ADD CONSTRAINT `FK_payment_config_installation` FOREIGN KEY (`installationId`) R
 
 -- Restricciones para payments
 ALTER TABLE payments
-ADD CONSTRAINT `FK_payments_client` FOREIGN KEY (`clientId`) REFERENCES `clients` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ADD CONSTRAINT `FK_payments_client` FOREIGN KEY (`clientId`) REFERENCES `clients` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- Restricciones para payment_histories
 ALTER TABLE payment_histories

@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, Min, IsString, IsBoolean, IsEnum, IsDateString } from 'class-validator';
+import { IsNumber, IsOptional, Min, IsString, IsBoolean, IsEnum, IsDateString, ValidateIf } from 'class-validator';
 import { PaymentStatus, PaymentType } from '../entities/payment.entity';
 
 export class CreatePaymentDto {
@@ -52,4 +52,13 @@ export class CreatePaymentDto {
   client?: number;
   @IsString() // O IsDateString
   dueDate: string;
+
+  @IsOptional()
+  @ValidateIf((o) => o.engagementDate !== undefined && o.engagementDate !== '')
+  @IsDateString()
+  engagementDate?: string;
+
+  @IsOptional()
+  @IsEnum(PaymentStatus)
+  status?: PaymentStatus;
 } 

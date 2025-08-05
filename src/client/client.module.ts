@@ -4,6 +4,7 @@ import { ClientController } from './client.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Client } from './entities/client.entity';
 import { Plan } from 'src/plans/entities/plan.entity';
+import { Sector } from 'src/sectors/entities/sector.entity';
 import { Payment } from 'src/payments/entities/payment.entity';
 import { Installation } from 'src/installations/entities/installation.entity';
 import { ClientPaymentConfig } from 'src/client-payment-config/entities/client-payment-config.entity';
@@ -24,6 +25,7 @@ if (!existsSync(uploadDir)) {
     TypeOrmModule.forFeature([
       Client,
       Plan,
+      Sector,
       Payment,
       Installation,
       ClientPaymentConfig,

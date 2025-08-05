@@ -17,11 +17,11 @@ export class RoleService {
     @InjectRepository(RoleHasPermission)
     private readonly roleHasPermissionRepository: Repository<RoleHasPermission>,
   ) { }
-  
+
   async findOne(id: number) {
     return this.roleRepository.findOne({
       where: { id },
-      relations: ['role_has_permissions', 'role_has_permissions.permission'],
+      relations: [ 'role_has_permissions', 'role_has_permissions.permission' ],
     });
   }
 
@@ -58,7 +58,7 @@ export class RoleService {
 
   async findAll() {
     const roles = await this.roleRepository.find({
-      relations: ['role_has_permissions', 'role_has_permissions.permission'],
+      relations: [ 'role_has_permissions', 'role_has_permissions.permission' ],
     });
 
     return roles.map((role) => ({
@@ -67,14 +67,14 @@ export class RoleService {
       description: role.description,
       allowAll: role.allowAll,
       isPublic: role.isPublic,
-      role_has_permissions: role.role_has_permissions.map((rolePermission) => ({
+      role_has_permissions: (role.role_has_permissions || []).map((rolePermission) => ({
         id: rolePermission.id,
-        name: rolePermission.name,
-        routeCode: rolePermission.routeCode,
-        actions: rolePermission.actions,
-        restrictions: rolePermission.restrictions,
-        isSubRoute: rolePermission.isSubRoute,
-        permissionId: rolePermission.permission?.id,
+        name: rolePermission.name || '',
+        routeCode: rolePermission.routeCode || '',
+        actions: rolePermission.actions || [],
+        restrictions: rolePermission.restrictions || [],
+        isSubRoute: rolePermission.isSubRoute || false,
+        permissionId: rolePermission.permission?.id || null,
         createdAt: rolePermission.created_at,
         updatedAt: rolePermission.updated_at,
       })),
@@ -86,7 +86,7 @@ export class RoleService {
 
     const role = await this.roleRepository.findOne({
       where: { id },
-      relations: ['role_has_permissions', 'role_has_permissions.permission'],
+      relations: [ 'role_has_permissions', 'role_has_permissions.permission' ],
     });
 
     if (!role) {
@@ -123,5 +123,26 @@ export class RoleService {
     await this.roleHasPermissionRepository.delete({ role: { id } });
 
     return this.roleRepository.delete(id);
+  }
+
+  async getSummary() {
+    try {
+      const roles = await this.findAll();
+
+      const summary = {
+        total: roles.length,
+        active: roles.filter(role => role.role_has_permissions && role.role_has_permissions.length > 0).length,
+        inactive: roles.filter(role => !role.role_has_permissions || role.role_has_permissions.length === 0).length,
+        publicRoles: roles.filter(role => role.isPublic).length,
+        privateRoles: roles.filter(role => !role.isPublic).length,
+        rolesWithPermissions: roles.filter(role => role.role_has_permissions && role.role_has_permissions.length > 0).length,
+        rolesWithoutPermissions: roles.filter(role => !role.role_has_permissions || role.role_has_permissions.length === 0).length,
+      };
+
+      return summary;
+    } catch (error) {
+      console.error('Error in getSummary:', error);
+      throw error;
+    }
   }
 }

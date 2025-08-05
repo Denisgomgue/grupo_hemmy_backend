@@ -17,6 +17,16 @@ export class RoleHasPermissionsController {
     return this.roleHasPermissionsService.findAll();
   }
 
+  @Get('matrix')
+  getRolePermissionMatrix() {
+    return this.roleHasPermissionsService.getRolePermissionMatrix();
+  }
+
+  @Post('matrix')
+  updateRolePermissionMatrix(@Body() matrix: any) {
+    return this.roleHasPermissionsService.updateRolePermissionMatrix(matrix);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.roleHasPermissionsService.findOne(+id);

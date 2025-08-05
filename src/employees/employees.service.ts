@@ -28,9 +28,20 @@ export class EmployeesService {
     }
 
     async findAll(): Promise<Employee[]> {
-        return this.employeeRepository.find({
-            relations: [ 'role' ]
-        });
+        try {
+            return await this.employeeRepository.find({
+                relations: [ 'role' ]
+            });
+        } catch (error) {
+            console.error('Error in findAll employees:', error);
+            // Si hay error con la relación, intentar sin relaciones
+            try {
+                return await this.employeeRepository.find();
+            } catch (fallbackError) {
+                console.error('Error in findAll employees fallback:', fallbackError);
+                return [];
+            }
+        }
     }
 
     async findOne(id: number): Promise<Employee> {
@@ -79,5 +90,35 @@ export class EmployeesService {
     async remove(id: number): Promise<void> {
         const employee = await this.findOne(id);
         await this.employeeRepository.remove(employee);
+    }
+
+    async getSummary() {
+        try {
+            const employees = await this.findAll();
+
+            const summary = {
+                total: employees.length,
+                active: employees.filter(emp => emp.role).length,
+                inactive: employees.filter(emp => !emp.role).length,
+                byRole: {} as Record<string, number>
+            };
+
+            // Contar empleados por rol
+            employees.forEach(employee => {
+                const roleName = employee.role?.name || 'Sin rol';
+                summary.byRole[ roleName ] = (summary.byRole[ roleName ] || 0) + 1;
+            });
+
+            return summary;
+        } catch (error) {
+            console.error('Error in getSummary:', error);
+            // Retornar datos por defecto si hay error
+            return {
+                total: 0,
+                active: 0,
+                inactive: 0,
+                byRole: {}
+            };
+        }
     }
 } 

@@ -1,15 +1,27 @@
 import { Controller, Post, UseInterceptors, UploadedFile, Body } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { extname, join } from 'path';
 import { createHash } from 'crypto';
+import { existsSync, mkdirSync } from 'fs';
 
 @Controller('upload')
 export class UploadController {
     @Post()
     @UseInterceptors(FileInterceptor('file', {
         storage: diskStorage({
-            destination: './uploads',
+            destination: (req, file, callback) => {
+                // Obtener la carpeta del body o usar 'clients' por defecto
+                const folder = req.body.folder || 'clients';
+                const uploadPath = join('./uploads', folder);
+
+                // Crear la carpeta si no existe
+                if (!existsSync(uploadPath)) {
+                    mkdirSync(uploadPath, { recursive: true });
+                }
+
+                callback(null, uploadPath);
+            },
             filename: (req, file, callback) => {
                 // Obtener el nombre base del archivo
                 const name = req.body.name || 'file';
@@ -38,10 +50,13 @@ export class UploadController {
     }))
     async uploadFile(
         @UploadedFile() file: Express.Multer.File,
-        @Body('name') name: string
+        @Body('name') name: string,
+        @Body('folder') folder: string
     ) {
+        const folderPath = folder || 'clients';
         return {
-            url: `/uploads/${file.filename}`,
+            filename: `uploads/${folderPath}/${file.filename}`,
+            url: `/uploads/${folderPath}/${file.filename}`,
             originalName: file.originalname,
             size: file.size
         };

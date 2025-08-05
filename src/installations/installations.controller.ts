@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe } from '@nestjs/common';
 import { InstallationsService } from './installations.service';
 import { CreateInstallationDto } from './dto/create-installation.dto';
 import { UpdateInstallationDto } from './dto/update-installation.dto';
@@ -8,8 +8,8 @@ export class InstallationsController {
     constructor(private readonly installationsService: InstallationsService) { }
 
     @Post()
-    create(@Body() createDto: CreateInstallationDto) {
-        return this.installationsService.create(createDto);
+    create(@Body() createInstallationDto: CreateInstallationDto) {
+        return this.installationsService.create(createInstallationDto);
     }
 
     @Get()
@@ -17,18 +17,23 @@ export class InstallationsController {
         return this.installationsService.findAll();
     }
 
+    @Get('client/:clientId')
+    findByClientId(@Param('clientId', ParseIntPipe) clientId: number) {
+        return this.installationsService.findByClientId(clientId);
+    }
+
     @Get(':id')
-    findOne(@Param('id') id: string) {
-        return this.installationsService.findOne(+id);
+    findOne(@Param('id', ParseIntPipe) id: number) {
+        return this.installationsService.findOne(id);
     }
 
     @Patch(':id')
-    update(@Param('id') id: string, @Body() updateDto: UpdateInstallationDto) {
-        return this.installationsService.update(+id, updateDto);
+    update(@Param('id', ParseIntPipe) id: number, @Body() updateInstallationDto: UpdateInstallationDto) {
+        return this.installationsService.update(id, updateInstallationDto);
     }
 
     @Delete(':id')
-    remove(@Param('id') id: string) {
-        return this.installationsService.remove(+id);
+    remove(@Param('id', ParseIntPipe) id: number) {
+        return this.installationsService.remove(id);
     }
 } 

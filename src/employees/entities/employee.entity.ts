@@ -15,7 +15,7 @@ export class Employee {
     @Column({ unique: true }) 
     dni: string;
 
-    @ManyToOne(() => Role, { eager: true, nullable: true, onDelete: 'SET NULL', onUpdate: 'CASCADE' })
+    @ManyToOne(() => Role, { nullable: true, onDelete: 'SET NULL', onUpdate: 'CASCADE' })
     @JoinColumn({ name: 'roleId' })
     role: Role;
 

@@ -1,5 +1,6 @@
 import { RoleHasPermission } from 'src/role-has-permissions/entities/role-has-permission.entity';
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
+import { Resource } from 'src/resources/entities/resource.entity';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, OneToMany, ManyToOne, JoinColumn } from 'typeorm';
 
 @Entity('permissions')
 export class Permission {
@@ -8,6 +9,9 @@ export class Permission {
 
     @Column()
     name: string;
+
+    @Column({ nullable: true })
+    displayName: string;
 
     @Column()
     routeCode: string;
@@ -21,7 +25,14 @@ export class Permission {
     @Column({ default: false })
     isSubRoute: boolean;
 
-    @OneToMany(type=>RoleHasPermission, role_has_permissions=>role_has_permissions.permission, {
+    @ManyToOne(type => Resource, resource => resource.permissions)
+    @JoinColumn({ name: 'resourceId' })
+    resource: Resource;
+
+    @Column({ nullable: true })
+    resourceId: number;
+
+    @OneToMany(type => RoleHasPermission, role_has_permissions => role_has_permissions.permission, {
         cascade: true,
     })
     role_has_permissions: RoleHasPermission[];

@@ -71,7 +71,7 @@ export class Payment {
     @Column({ nullable: true })
     engagementDate: Date;
 
-    @ManyToOne(() => Client, { eager: true, nullable: true, onDelete: 'SET NULL', onUpdate: 'CASCADE' })
+    @ManyToOne(() => Client, { eager: true, nullable: true, onDelete: 'CASCADE', onUpdate: 'CASCADE' })
     @JoinColumn({ name: 'clientId' })
     client: Client;
 

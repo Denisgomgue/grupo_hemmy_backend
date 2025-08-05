@@ -232,7 +232,7 @@ SET @constraint_exists := (
     AND CONSTRAINT_NAME = @fk_name
 );
 SET @sql := IF(@constraint_exists = 0,
-  'ALTER TABLE payments ADD CONSTRAINT FK_payments_client FOREIGN KEY (clientId) REFERENCES clients(id) ON DELETE SET NULL ON UPDATE CASCADE;',
+  'ALTER TABLE payments ADD CONSTRAINT FK_payments_client FOREIGN KEY (clientId) REFERENCES clients(id) ON DELETE CASCADE ON UPDATE CASCADE;',
   'SELECT "Constraint FK_payments_client already exists, skipping...";'
 );
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;

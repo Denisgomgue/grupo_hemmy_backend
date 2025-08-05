@@ -1,13 +1,14 @@
-import { DeviceType, DeviceStatus } from '../entities/device.entity';
+import { DeviceType, DeviceStatus, DeviceUseType } from '../entities/device.entity';
 import { IsEnum, IsOptional, IsString, IsDateString, IsNumber } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class CreateDeviceDto {
   @IsString()
-  serial_number: string;
+  serialNumber: string;
 
   @IsOptional()
   @IsString()
-  mac_address?: string;
+  macAddress?: string;
 
   @IsEnum(DeviceType)
   type: DeviceType;
@@ -25,7 +26,11 @@ export class CreateDeviceDto {
 
   @IsOptional()
   @IsDateString()
-  assigned_date?: string;
+  @Transform(({ value }) => value === '' ? null : value)
+  assignedDate?: string | null;
+
+  @IsEnum(DeviceUseType)
+  useType: DeviceUseType;
 
   @IsOptional()
   @IsString()
@@ -33,9 +38,19 @@ export class CreateDeviceDto {
 
   @IsOptional()
   @IsNumber()
-  installationId?: number;
+  @Transform(({ value }) => value === '' ? null : value)
+  assignedInstallationId?: number | null;
 
   @IsOptional()
   @IsNumber()
-  employeeId?: number;
+  @Transform(({ value }) => value === '' ? null : value)
+  assignedEmployeeId?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Transform(({ value }) => {
+    if (value === '' || value === 0) return null;
+    return value;
+  })
+  assignedClientId?: number | null;
 } 

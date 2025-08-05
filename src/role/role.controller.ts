@@ -5,7 +5,7 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 
 @Controller('roles')
 export class RoleController {
-  constructor(private readonly roleService: RoleService) {}
+  constructor(private readonly roleService: RoleService) { }
 
   @Post()
   create(@Body() createRoleDto: CreateRoleDto) {
@@ -15,6 +15,11 @@ export class RoleController {
   @Get()
   findAll() {
     return this.roleService.findAll();
+  }
+
+  @Get('summary')
+  getSummary() {
+    return this.roleService.getSummary();
   }
 
   @Get(':id')

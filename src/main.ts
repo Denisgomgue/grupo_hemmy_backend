@@ -16,12 +16,25 @@ async function bootstrap() {
     credentials: true,
   });
   app.use(cookieParser());
-  app.useGlobalPipes(new ValidationPipe());
+  app.useGlobalPipes(new ValidationPipe({
+    transform: true,
+    transformOptions: {
+      enableImplicitConversion: false,
+    },
+  }));
   app.useGlobalFilters(new DatabaseErrorFilter());
-  const uploadsPath = join(__dirname, '..', 'uploads');
+
+  // Configurar archivos estáticos usando process.cwd() para asegurar la ruta correcta
+  const uploadsPath = join(process.cwd(), 'uploads');
+  // Log removido para limpieza
+
   app.useStaticAssets(uploadsPath, {
     prefix: '/uploads/',
   });
+
   await app.listen(3000);
+  // Log removido para limpieza
+  // Log removido para limpieza
+
 }
 bootstrap();

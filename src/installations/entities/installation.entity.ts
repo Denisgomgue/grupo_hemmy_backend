@@ -5,6 +5,11 @@ import { Sector } from 'src/sectors/entities/sector.entity';
 import { Device } from 'src/devices/entities/device.entity';
 import { ClientPaymentConfig } from 'src/client-payment-config/entities/client-payment-config.entity';
 
+export enum InstallationStatus {
+    ACTIVE = 'ACTIVE',
+    INACTIVE = 'INACTIVE'
+}
+
 @Entity("installations")
 export class Installation {
     @PrimaryGeneratedColumn()
@@ -14,7 +19,7 @@ export class Installation {
     @JoinColumn({ name: 'clientId' })
     client: Client;
 
-    @Column({ type: 'date' })
+    @Column({ nullable: true })
     installationDate: Date;
 
     @Column({ type: 'text', nullable: true })
@@ -25,6 +30,13 @@ export class Installation {
 
     @Column({ nullable: true })
     referenceImage: string;
+
+    @Column({
+        type: 'enum',
+        enum: InstallationStatus,
+        default: InstallationStatus.ACTIVE
+    })
+    status: InstallationStatus;
 
     @ManyToOne(() => Plan, { eager: true, nullable: false, onDelete: 'CASCADE' })
     @JoinColumn({ name: 'planId' })

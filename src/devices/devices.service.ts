@@ -17,10 +17,19 @@ export class DevicesService {
         return this.deviceRepository.save(device);
     }
 
-    async findAll(): Promise<Device[]> {
-        return this.deviceRepository.find({
-            relations: [ 'installation', 'employee', 'client' ]
-        });
+    async findAll(orderBy: 'created' | 'updated' = 'created', orderDirection: 'ASC' | 'DESC' = 'DESC'): Promise<Device[]> {
+        const queryBuilder = this.deviceRepository.createQueryBuilder('device')
+            .leftJoinAndSelect('device.installation', 'installation')
+            .leftJoinAndSelect('device.employee', 'employee')
+            .leftJoinAndSelect('device.client', 'client');
+
+        if (orderBy === 'created') {
+            queryBuilder.orderBy('device.created_at', orderDirection);
+        } else if (orderBy === 'updated') {
+            queryBuilder.orderBy('device.updated_at', orderDirection);
+        }
+
+        return queryBuilder.getMany();
     }
 
     async findOne(id: number): Promise<Device> {
@@ -37,6 +46,11 @@ export class DevicesService {
     async update(id: number, updateDeviceDto: UpdateDeviceDto): Promise<Device> {
         const device = await this.findOne(id);
 
+        // Prevenir cambios en el número de serie
+        if (updateDeviceDto.serialNumber && updateDeviceDto.serialNumber !== device.serialNumber) {
+            throw new Error('No se puede modificar el número de serie de un dispositivo existente');
+        }
+
         // Manejar la transformación manualmente
         if (updateDeviceDto.assignedClientId === 0) {
             updateDeviceDto.assignedClientId = null;
@@ -51,30 +65,16 @@ export class DevicesService {
             updateDeviceDto.assignedDate = null;
         }
 
+        // Aplicar todos los cambios al dispositivo
         Object.assign(device, updateDeviceDto);
 
-        // Usar consulta SQL directa para asegurar que los valores null se guarden correctamente
-        const queryBuilder = this.deviceRepository.createQueryBuilder('device');
-
-        const updateQuery = queryBuilder
-            .update()
-            .set({
-                status: device.status,
-                assignedClientId: device.assignedClientId,
-                assignedInstallationId: device.assignedInstallationId,
-                assignedEmployeeId: device.assignedEmployeeId,
-                assignedDate: device.assignedDate
-            })
-            .where('id = :id', { id: device.id });
-
-        const updateResult = await updateQuery.execute();
-
-        const savedDevice = await this.deviceRepository.findOne({ where: { id: device.id } });
-
-        // Verificar directamente en la base de datos (solo para debugging)
-        const dbDevice = await this.deviceRepository.findOne({ where: { id: device.id } });
-
-        return savedDevice;
+        // Usar save() en lugar de queryBuilder para asegurar que todos los campos se actualicen
+        try {
+            const savedDevice = await this.deviceRepository.save(device);
+            return savedDevice;
+        } catch (error) {
+            throw error;
+        }
     }
 
     async remove(id: number): Promise<void> {

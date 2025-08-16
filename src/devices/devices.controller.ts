@@ -14,8 +14,8 @@ export class DevicesController {
     }
 
     @Get()
-    findAll() {
-        return this.devicesService.findAll();
+    findAll(@Query('orderBy') orderBy?: 'created' | 'updated', @Query('orderDirection') orderDirection?: 'ASC' | 'DESC') {
+        return this.devicesService.findAll(orderBy || 'created', orderDirection || 'DESC');
     }
 
     @Get('summary')

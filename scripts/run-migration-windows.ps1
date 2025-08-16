@@ -7,7 +7,7 @@ param(
     [string]$ServerHost = "localhost",
     [string]$Port = "3306",
     [string]$Username = "root",
-    [string]$Password = "admin123"
+    [string]$Password = ""
 )
 
 # Configuración de colores para output

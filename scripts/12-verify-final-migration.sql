@@ -97,6 +97,15 @@ LEFT JOIN (
 WHERE p_count.total_pagos > 0
 LIMIT 10;
 
+-- 🎯 VERIFICACIÓN: Contar configuraciones por estado
+SELECT 
+    COUNT(*) as total,
+    COUNT(CASE WHEN paymentStatus = 'PAID' THEN 1 END) as pagados,
+    COUNT(CASE WHEN paymentStatus = 'EXPIRED' THEN 1 END) as expirados,
+    COUNT(CASE WHEN paymentStatus = 'EXPIRING' THEN 1 END) as por_vencer,
+    COUNT(CASE WHEN paymentStatus = 'SUSPENDED' THEN 1 END) as suspendidos
+FROM client_payment_configs;
+
 -- Registrar verificación completada
 INSERT INTO migrations (timestamp, name, status) VALUES 
 (UNIX_TIMESTAMP() * 1000, 'VerifyFinalMigrationImproved', 'COMPLETED');

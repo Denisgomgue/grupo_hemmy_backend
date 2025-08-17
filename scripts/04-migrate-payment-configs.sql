@@ -36,8 +36,8 @@ SELECT
   COALESCE(c.advancePayment, 0) AS advancePayment,
   -- 🎯 CALCULAR paymentStatus BASADO EN DATOS EXISTENTES
   CASE 
-    WHEN c.initialPaymentDate IS NOT NULL OR c.paymentDate IS NOT NULL THEN 'ACTIVE'
-    ELSE 'PENDING'
+    WHEN c.initialPaymentDate IS NOT NULL OR c.paymentDate IS NOT NULL THEN 'PAID'
+    ELSE 'EXPIRED'
   END AS paymentStatus,
   CURRENT_TIMESTAMP AS created_at,
   CURRENT_TIMESTAMP AS updated_at
@@ -52,13 +52,13 @@ ON DUPLICATE KEY UPDATE
   updated_at = CURRENT_TIMESTAMP;
 
 -- Verificar migración de configuraciones de pago
+-- 🎯 VERIFICACIÓN: Contar configuraciones por estado
 SELECT 
-  'Configuraciones de Pago' as tabla,
-  COUNT(*) as total,
-  COUNT(CASE WHEN initialPaymentDate IS NOT NULL THEN 1 END) as con_fecha_inicial,
-  COUNT(CASE WHEN advancePayment > 0 THEN 1 END) as con_pago_adelantado,
-  COUNT(CASE WHEN paymentStatus = 'ACTIVE' THEN 1 END) as activos,
-  COUNT(CASE WHEN paymentStatus = 'PENDING' THEN 1 END) as pendientes
+    COUNT(*) as total,
+    COUNT(CASE WHEN paymentStatus = 'PAID' THEN 1 END) as pagados,
+    COUNT(CASE WHEN paymentStatus = 'EXPIRED' THEN 1 END) as expirados,
+    COUNT(CASE WHEN paymentStatus = 'EXPIRING' THEN 1 END) as por_vencer,
+    COUNT(CASE WHEN paymentStatus = 'SUSPENDED' THEN 1 END) as suspendidos
 FROM client_payment_configs;
 
 -- Registrar paso completado

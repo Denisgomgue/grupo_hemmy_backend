@@ -97,6 +97,13 @@ LEFT JOIN (
 WHERE p_count.total_pagos > 0
 LIMIT 10;
 
+-- 🎯 VERIFICACIÓN: Contar historiales por estado
+SELECT 
+    COUNT(*) as total,
+    COUNT(CASE WHEN paymentStatus = 'PAID' THEN 1 END) as pagados,
+    COUNT(CASE WHEN paymentStatus = 'EXPIRED' THEN 1 END) as expirados
+FROM client_payment_configs;
+
 -- Registrar verificación completada
 INSERT INTO migrations (timestamp, name, status) VALUES 
 (UNIX_TIMESTAMP() * 1000, 'VerifyFinalMigrationImproved', 'COMPLETED');

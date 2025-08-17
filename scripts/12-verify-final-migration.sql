@@ -1,5 +1,5 @@
 -- =====================================================
--- PASO 6: VERIFICACIÓN FINAL DE MIGRACIÓN (MEJORADA)
+-- PASO 12: VERIFICACIÓN FINAL DE MIGRACIÓN (MEJORADA)
 -- =====================================================
 
 -- Verificar integridad de la migración

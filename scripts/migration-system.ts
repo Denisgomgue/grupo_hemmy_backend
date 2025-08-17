@@ -159,6 +159,30 @@ class DatabaseMigration {
         return true;
     }
 
+    // TAREA 2.5: Diagnóstico de tablas (opcional)
+    async diagnoseTables(): Promise<boolean> {
+        this.log('🔍 TAREA 2.5: Diagnóstico de tablas (OPCIONAL)', 'warning');
+
+        const shouldDiagnose = await this.confirmAction('¿Desea ejecutar el diagnóstico de tablas antes de la migración?');
+
+        if (shouldDiagnose) {
+            if (!await this.executeSQL('00-diagnose-tables.sql', 'Diagnóstico de estructura de tablas')) {
+                this.log('❌ Error en diagnóstico', 'error');
+                const shouldContinue = await this.confirmAction('¿Desea continuar con la migración de todas formas?');
+                if (!shouldContinue) {
+                    return false;
+                }
+            } else {
+                this.log('✅ Diagnóstico completado', 'success');
+                this.log('💡 Revise la salida del diagnóstico para verificar la estructura de las tablas', 'info');
+            }
+        } else {
+            this.log('⏭️  Diagnóstico omitido por el usuario', 'info');
+        }
+
+        return true;
+    }
+
     // TAREA 3: Ejecutar migración principal
     async executeMainMigration(): Promise<boolean> {
         this.log('🚀 TAREA 3: Ejecutar migración principal', 'warning');
@@ -217,22 +241,35 @@ class DatabaseMigration {
         return true;
     }
 
-    // TAREA 4: Verificar migración
-    async verifyMigration(): Promise<boolean> {
-        this.log('🔍 TAREA 4: Verificar migración', 'warning');
+    // TAREA 4: Verificación inicial de migración
+    async verifyInitialMigration(): Promise<boolean> {
+        this.log('🔍 TAREA 4: Verificación inicial de migración', 'warning');
 
-        if (!await this.executeSQL('09-verify-migration.sql', 'Verificación de migración')) {
-            this.log('❌ Error en verificación', 'error');
+        if (!await this.executeSQL('09-verify-migration.sql', 'Verificación inicial de migración')) {
+            this.log('❌ Error en verificación inicial', 'error');
             return false;
         }
 
-        this.log('✅ Verificación completada', 'success');
+        this.log('✅ Verificación inicial completada', 'success');
         return true;
     }
 
-    // TAREA 5: Limpiar tablas antiguas (opcional)
+    // TAREA 5: Verificación final completa
+    async verifyFinalMigration(): Promise<boolean> {
+        this.log('🔍 TAREA 5: Verificación final completa', 'warning');
+
+        if (!await this.executeSQL('12-verify-final-migration.sql', 'Verificación final completa de migración')) {
+            this.log('❌ Error en verificación final', 'error');
+            return false;
+        }
+
+        this.log('✅ Verificación final completada', 'success');
+        return true;
+    }
+
+    // TAREA 6: Limpiar tablas antiguas (opcional)
     async cleanupOldTables(): Promise<boolean> {
-        this.log('🧹 TAREA 5: Limpiar tablas antiguas (OPCIONAL)', 'warning');
+        this.log('🧹 TAREA 6: Limpiar tablas antiguas (OPCIONAL)', 'warning');
 
         const shouldCleanup = await this.confirmAction('¿Desea eliminar las tablas antiguas (client, payment, payment_history)?');
 
@@ -247,6 +284,38 @@ class DatabaseMigration {
         }
 
         return true;
+    }
+
+    // Ejecutar solo diagnóstico
+    async runDiagnosisOnly(): Promise<void> {
+        try {
+            this.log('=====================================================', 'info');
+            this.log('DIAGNÓSTICO DE TABLAS - GRUPO HEMMY', 'info');
+            this.log('=====================================================', 'info');
+
+            await this.showConfiguration();
+
+            if (!await this.verifyEnvironment()) {
+                this.log('❌ No se puede ejecutar el diagnóstico', 'error');
+                return;
+            }
+
+            if (!await this.executeSQL('00-diagnose-tables.sql', 'Diagnóstico de estructura de tablas')) {
+                this.log('❌ Error en diagnóstico', 'error');
+                return;
+            }
+
+            this.log('✅ Diagnóstico completado exitosamente', 'success');
+            this.log('\n📝 Información del diagnóstico:', 'info');
+            this.log('   1. Revise la salida anterior para ver la estructura de las tablas', 'info');
+            this.log('   2. Verifique que las columnas y relaciones sean correctas', 'info');
+            this.log('   3. Si hay errores, corrija los scripts de migración', 'info');
+
+        } catch (error) {
+            this.log(`❌ Error inesperado: ${error}`, 'error');
+        } finally {
+            this.rl.close();
+        }
     }
 
     // Ejecutar migración completa
@@ -268,13 +337,15 @@ class DatabaseMigration {
             const tasks = [
                 { name: 'Verificar entorno', task: () => this.verifyEnvironment() },
                 { name: 'Crear backup', task: () => this.createBackupTask() },
+                { name: 'Diagnóstico de tablas', task: () => this.diagnoseTables() },
                 { name: 'Migración principal', task: () => this.executeMainMigration() },
-                { name: 'Verificar migración', task: () => this.verifyMigration() },
+                { name: 'Verificación inicial', task: () => this.verifyInitialMigration() },
+                { name: 'Verificación final', task: () => this.verifyFinalMigration() },
                 { name: 'Limpieza opcional', task: () => this.cleanupOldTables() }
             ];
 
             for (const { name, task } of tasks) {
-                this.log(`\n🎯 Ejecutando: ${name}`, 'warning');
+                this.log(`\n�� Ejecutando: ${name}`, 'warning');
                 if (!await task()) {
                     this.log(`❌ Error en tarea: ${name}`, 'error');
                     this.log('💡 Puede restaurar desde el backup si es necesario', 'info');
@@ -282,11 +353,12 @@ class DatabaseMigration {
                 }
             }
 
-            this.log('\n🎉 ¡Migración completada exitosamente!', 'success');
+            this.log('\n�� ¡Migración completada exitosamente!', 'success');
             this.log('\n📝 Próximos pasos:', 'info');
             this.log('   1. Verificar que la aplicación funciona correctamente', 'info');
             this.log('   2. Probar las funcionalidades principales', 'info');
             this.log('   3. Si todo está bien, puede eliminar el backup', 'info');
+            this.log('   4. Revisar el reporte de verificación final', 'info');
 
         } catch (error) {
             this.log(`❌ Error inesperado: ${error}`, 'error');
@@ -303,11 +375,39 @@ async function main() {
         host: process.env.DB_HOST || 'localhost',
         port: process.env.DB_PORT || '3306',
         username: process.env.DB_USERNAME || 'root',
-        password: process.env.DB_PASSWORD || ''
+        password: process.env.DB_PASSWORD || 'admin123'
     };
 
     const migration = new DatabaseMigration(config);
-    await migration.run();
+
+    // Verificar si se pasó un argumento de línea de comandos
+    const args = process.argv.slice(2);
+
+    if (args.includes('--diagnose') || args.includes('-d')) {
+        // Ejecutar solo diagnóstico
+        await migration.runDiagnosisOnly();
+    } else if (args.includes('--help') || args.includes('-h')) {
+        // Mostrar ayuda
+        console.log(`
+🔧 SISTEMA DE MIGRACIÓN GRUPO HEMMY - TYPESCRIPT
+
+📋 USO:
+  npm run migrate              # Migración completa
+  npm run migrate --diagnose   # Solo diagnóstico de tablas
+  npm run migrate --help       # Mostrar esta ayuda
+
+📝 OPCIONES:
+  --diagnose, -d    Ejecutar solo diagnóstico de estructura de tablas
+  --help, -h        Mostrar esta ayuda
+
+💡 RECOMENDACIÓN:
+  Si es la primera vez, ejecute primero el diagnóstico para verificar
+  la estructura de las tablas antes de proceder con la migración.
+        `);
+    } else {
+        // Ejecutar migración completa
+        await migration.run();
+    }
 }
 
 // Ejecutar si es el archivo principal
@@ -315,4 +415,4 @@ if (require.main === module) {
     main().catch(console.error);
 }
 
-export { DatabaseMigration, MigrationConfig }; 
+export { DatabaseMigration, MigrationConfig };

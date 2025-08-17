@@ -336,7 +336,7 @@ export class ClientService {
       .leftJoinAndSelect('client.devices', 'devices')
       .leftJoinAndSelect('client.payments', 'payments', 'payments.isVoided = :isVoided', { isVoided: false });
 
-    // Aplicar filtros
+    // 🎯 SOLUCIÓN: Aplicar filtros ANTES de la paginación
     if (search) {
       queryBuilder.andWhere(
         '(client.name LIKE :search OR client.lastName LIKE :search OR client.dni LIKE :search OR client.phone LIKE :search)',
@@ -352,14 +352,17 @@ export class ClientService {
       queryBuilder.andWhere('sector.id IN (:...sectors)', { sectors });
     }
 
-    // Paginación
+    // 🎯 SOLUCIÓN: Contar total ANTES de aplicar paginación
+    const total = await queryBuilder.getCount();
+
+    // 🎯 SOLUCIÓN: Aplicar paginación DESPUÉS de los filtros
     const offset = (page - 1) * limit;
     queryBuilder.skip(offset).take(limit);
 
     // Ordenamiento
     queryBuilder.orderBy('client.created_at', 'DESC');
 
-    const [ data, total ] = await queryBuilder.getManyAndCount();
+    const data = await queryBuilder.getMany();
 
     return { data, total };
   }

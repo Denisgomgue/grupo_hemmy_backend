@@ -5,6 +5,8 @@
   "main": "migration-system.ts",
   "scripts": {
     "migrate": "ts-node migration-system.ts",
+    "migrate:diagnose": "ts-node migration-system.ts --diagnose",
+    "migrate:help": "ts-node migration-system.ts --help",
     "migrate:verify": "ts-node migration-system.ts --verify-only",
     "migrate:cleanup": "ts-node migration-system.ts --cleanup-only",
     "build": "tsc",

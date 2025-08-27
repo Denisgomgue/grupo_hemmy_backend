@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VSM - Estado Actual - Proceso de Instalación de Servicios</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .vsm-container {
+            padding: 30px;
+            background: #f8f9fa;
+        }
+        
+        .info-flow {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .info-flow h3 {
+            color: #856404;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+        
+        .supplier-client-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
+        
+        .entity {
+            background: white;
+            border: 3px solid #3498db;
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            flex: 1;
+            margin: 0 15px;
+        }
+        
+        .entity.production-control {
+            border-color: #e74c3c;
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            color: white;
+        }
+        
+        .entity h3 {
+            font-size: 1.4em;
+            margin-bottom: 15px;
+        }
+        
+        .entity-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+        
+        .process-flow {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .process-flow h3 {
+            text-align: center;
+            margin-bottom: 25px;
+            color: #2c3e50;
+            font-size: 1.5em;
+        }
+        
+        .process-steps {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .process-step {
+            background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
+            color: white;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            flex: 1;
+            margin: 0 10px;
+            min-width: 200px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .process-step h4 {
+            font-size: 1.2em;
+            margin-bottom: 15px;
+        }
+        
+        .process-metrics {
+            background: rgba(255,255,255,0.2);
+            border-radius: 8px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        
+        .inventory {
+            background: #ff7675;
+            color: white;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 15px auto;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        
+        .metrics-summary {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .metric-card {
+            background: linear-gradient(135deg, #00b894 0%, #00a085 100%);
+            color: white;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .metric-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .metric-label {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .timeline {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .timeline h3 {
+            text-align: center;
+            margin-bottom: 25px;
+            color: #2c3e50;
+            font-size: 1.5em;
+        }
+        
+        .timeline-flow {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .timeline-item {
+            background: #f39c12;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            flex: 1;
+            min-width: 120px;
+            font-weight: bold;
+        }
+        
+        .arrow {
+            font-size: 1.5em;
+            color: #e67e22;
+        }
+        
+        .manual-processes {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .manual-processes h3 {
+            text-align: center;
+            margin-bottom: 25px;
+            color: #2c3e50;
+            font-size: 1.5em;
+        }
+        
+        .process-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .process-detail {
+            background: #ecf0f1;
+            border-left: 5px solid #3498db;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        
+        .process-detail h4 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+        
+        .detail-item {
+            margin: 8px 0;
+            padding: 5px 0;
+            border-bottom: 1px solid #bdc3c7;
+        }
+        
+        .detail-item:last-child {
+            border-bottom: none;
+        }
+        
+        .detail-label {
+            font-weight: bold;
+            color: #34495e;
+        }
+        
+        .detail-value {
+            color: #7f8c8d;
+        }
+        
+        @media (max-width: 768px) {
+            .supplier-client-row {
+                flex-direction: column;
+            }
+            
+            .entity {
+                margin: 10px 0;
+            }
+            
+            .process-steps {
+                flex-direction: column;
+            }
+            
+            .process-step {
+                margin: 10px 0;
+            }
+            
+            .timeline-flow {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 Value Stream Map - Estado Actual</h1>
+            <p>Proceso de Instalación de Servicios - Análisis Detallado de Procesos Manuales</p>
+        </div>
+        
+        <div class="vsm-container">
+            <!-- Flujo de Información -->
+            <div class="info-flow">
+                <h3>📡 Flujo de Información y Comunicación</h3>
+                <p><strong>Pronósticos:</strong> Weekly forecast (Proveedor) → Control de Producción | 15 day forecast (Cliente) → Control de Producción</p>
+                <p><strong>Solicitudes:</strong> Solicitud diaria (Cliente) → Control de Producción</p>
+                <p><strong>Programación:</strong> Control de Producción ↔ Daily Schedule → Todos los procesos</p>
+            </div>
+            
+            <!-- Entidades Principales -->
+            <div class="supplier-client-row">
+                <div class="entity">
+                    <div class="entity-icon">🏭</div>
+                    <h3>Proveedor</h3>
+                    <p>Weekly forecast</p>
+                    <p>Envío de solicitudes</p>
+                </div>
+                
+                <div class="entity production-control">
+                    <div class="entity-icon">⚙️</div>
+                    <h3>Control de Producción</h3>
+                    <p>• Recepción de pedidos</p>
+                    <p>• Planificación de agenda</p>
+                    <p>• Coordinación con Daily Schedule</p>
+                </div>
+                
+                <div class="entity">
+                    <div class="entity-icon">🏢</div>
+                    <h3>Cliente</h3>
+                    <p>15 day forecast</p>
+                    <p>Solicitud diaria</p>
+                    <p>Recepción del servicio</p>
+                </div>
+            </div>
+            
+            <!-- Procesos Manuales Detallados -->
+            <div class="manual-processes">
+                <h3>🔄 Procesos Manuales Detallados</h3>
+                <div class="process-details">
+                    <div class="process-detail">
+                        <h4>1. Recepción de Solicitud</h4>
+                        <div class="detail-item">
+                            <span class="detail-label">Operadores:</span>
+                            <span class="detail-value">1 persona</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Tiempo de Ciclo:</span>
+                            <span class="detail-value">5 minutos</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Actividades Manuales:</span>
+                            <span class="detail-value">Revisar solicitud, verificar documentación, registrar en sistema</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Tiempo de Espera Antes:</span>
+                            <span class="detail-value">1 día</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Tiempo de Espera Después:</span>
+                            <span class="detail-value">0.765 días</span>
+                        </div>
+                    </div>
+                    
+                    <div class="process-detail">
+                        <h4>2. Asignación de Fecha</h4>
+                        <div class="detail-item">
+                            <span class="detail-label">Operadores:</span>
+                            <span class="detail-value">1 persona</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Tiempo de Ciclo:</span>
+                            <span class="detail-value">15 minutos</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Actividades Manuales:</span>
+                            <span class="detail-value">Revisar disponibilidad, coordinar con técnicos, programar fecha</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Tiempo de Espera Después:</span>
+                            <span class="detail-value">0.55 días</span>
+                        </div>
+                    </div>
+                    
+                    <div class="process-detail">
+                        <h4>3. Instalación Técnica</h4>
+                        <div class="detail-item">
+                            <span class="detail-label">Operadores:</span>
+                            <span class="detail-value">3 técnicos</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Tiempo de Ciclo:</span>
+                            <span class="detail-value">90 minutos</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Actividades Manuales:</span>
+                            <span class="detail-value">Instalación física, configuración, pruebas, documentación</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Tiempo de Espera Después:</span>
+                            <span class="detail-value">0.36 días</span>
+                        </div>
+                    </div>
+                    
+                    <div class="process-detail">
+                        <h4>4. Activación del Servicio</h4>
+                        <div class="detail-item">
+                            <span class="detail-label">Operadores:</span>
+                            <span class="detail-value">1 persona</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Tiempo de Ciclo:</span>
+                            <span class="detail-value">10 minutos</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Actividades Manuales:</span>
+                            <span class="detail-value">Activación en sistema, verificación final, entrega al cliente</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Tiempo de Espera Después:</span>
+                            <span class="detail-value">10 minutos</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Flujo de Proceso -->
+            <div class="process-flow">
+                <h3>📋 Flujo de Proceso Principal</h3>
+                <div class="process-steps">
+                    <div class="process-step">
+                        <h4>Recepción de Solicitud</h4>
+                        <div class="inventory">10</div>
+                        <div class="process-metrics">
+                            <strong>1 Operador</strong><br>
+                            <strong>C/T: 5 min</strong>
+                        </div>
+                    </div>
+                    
+                    <div class="process-step">
+                        <h4>Asignación de Fecha</h4>
+                        <div class="inventory">5</div>
+                        <div class="process-metrics">
+                            <strong>1 Operador</strong><br>
+                            <strong>C/T: 15 min</strong>
+                        </div>
+                    </div>
+                    
+                    <div class="process-step">
+                        <h4>Instalación Técnica</h4>
+                        <div class="inventory">3</div>
+                        <div class="process-metrics">
+                            <strong>3 Técnicos</strong><br>
+                            <strong>C/T: 90 min</strong>
+                        </div>
+                    </div>
+                    
+                    <div class="process-step">
+                        <h4>Activación del Servicio</h4>
+                        <div class="inventory">2</div>
+                        <div class="process-metrics">
+                            <strong>1 Operador</strong><br>
+                            <strong>C/T: 10 min</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Métricas Globales -->
+            <div class="metrics-summary">
+                <h3>📊 Métricas Globales del Proceso</h3>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-value">2.675</div>
+                        <div class="metric-label">PLT (Process Lead Time)</div>
+                        <div class="metric-label">Días</div>
+                    </div>
+                    
+                    <div class="metric-card">
+                        <div class="metric-value">130</div>
+                        <div class="metric-label">VA/T (Value Added Time)</div>
+                        <div class="metric-label">Segundos</div>
+                    </div>
+                    
+                    <div class="metric-card">
+                        <div class="metric-value">0.193%</div>
+                        <div class="metric-label">PCE (Process Cycle Efficiency)</div>
+                        <div class="metric-label">Eficiencia</div>
+                    </div>
+                    
+                    <div class="metric-card">
+                        <div class="metric-value">20</div>
+                        <div class="metric-label">Demanda Semanal</div>
+                        <div class="metric-label">Instalaciones</div>
+                    </div>
+                    
+                    <div class="metric-card">
+                        <div class="metric-value">31.5</div>
+                        <div class="metric-label">Takt Time</div>
+                        <div class="metric-label">Segundos</div>
+                    </div>
+                    
+                    <div class="metric-card">
+                        <div class="metric-value">120</div>
+                        <div class="metric-label">Tiempo Total de Ciclo</div>
+                        <div class="metric-label">Minutos</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Línea de Tiempo -->
+            <div class="timeline">
+                <h3>⏱️ Línea de Tiempo del Proceso</h3>
+                <div class="timeline-flow">
+                    <div class="timeline-item">1 día<br>Espera</div>
+                    <div class="arrow">→</div>
+                    <div class="timeline-item">5 min<br>Recepción</div>
+                    <div class="arrow">→</div>
+                    <div class="timeline-item">0.765 días<br>Espera</div>
+                    <div class="arrow">→</div>
+                    <div class="timeline-item">15 min<br>Asignación</div>
+                    <div class="arrow">→</div>
+                    <div class="timeline-item">0.55 días<br>Espera</div>
+                    <div class="arrow">→</div>
+                    <div class="timeline-item">90 min<br>Instalación</div>
+                    <div class="arrow">→</div>
+                    <div class="timeline-item">0.36 días<br>Espera</div>
+                    <div class="arrow">→</div>
+                    <div class="timeline-item">10 min<br>Activación</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
